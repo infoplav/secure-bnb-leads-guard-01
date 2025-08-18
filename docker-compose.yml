@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  asterisk-gateway:
+    build: .
+    container_name: webrtc-sip-gateway
+    restart: unless-stopped
+    ports:
+      - "5060:5060/udp"    # SIP UDP
+      - "5060:5060/tcp"    # SIP TCP
+      - "8088:8088/tcp"    # WebSocket HTTP
+      - "8089:8089/tcp"    # WebSocket HTTPS (WSS)
+      - "10000-20000:10000-20000/udp"  # RTP media
+    environment:
+      - ASTERISK_UID=1000
+      - ASTERISK_GID=1000
+    volumes:
+      - asterisk_logs:/var/log/asterisk
+      - asterisk_spool:/var/spool/asterisk
+      - asterisk_lib:/var/lib/asterisk
+      # Optional: Mount custom config
+      # - ./asterisk-config:/etc/asterisk:ro
+    networks:
+      - webrtc-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  asterisk_logs:
+  asterisk_spool:
+  asterisk_lib:
+
+networks:
+  webrtc-network:
+    driver: bridge

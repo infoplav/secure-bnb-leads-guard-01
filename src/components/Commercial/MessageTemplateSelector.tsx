@@ -1,0 +1,386 @@
+import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, Mail, MessageSquare, Send, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+
+interface MessageTemplateSelectorProps {
+  lead: any;
+  commercial: any;
+  onBack: () => void;
+  onLogout: () => void;
+}
+
+const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: MessageTemplateSelectorProps) => {
+  const { toast } = useToast();
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<string>('');
+  const [selectedSmsTemplate, setSelectedSmsTemplate] = useState<string>('');
+  const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
+  const [selectedStep, setSelectedStep] = useState<number>(1);
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [smsStatus, setSmsStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+
+  // Fetch email templates
+  const { data: emailTemplates } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('email_templates')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch SMS templates
+  const { data: smsTemplates } = useQuery({
+    queryKey: ['sms-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sms_templates')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const replaceVariables = (content: string) => {
+    return content
+      .replace(/\{\{name\}\}/g, lead.name || '')
+      .replace(/\{\{first_name\}\}/g, lead.first_name || '')
+      .replace(/\{\{email\}\}/g, lead.email || '')
+      .replace(/\{\{phone\}\}/g, lead.phone || '')
+      .replace(/\{\{commercial_name\}\}/g, commercial.name || '');
+  };
+
+  const sendEmail = async () => {
+    if (!selectedEmailTemplate) {
+      toast({
+        title: "Template requis",
+        description: "Veuillez sélectionner un template email",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const template = emailTemplates?.find(t => t.id === selectedEmailTemplate);
+    if (!template) return;
+
+    setEmailStatus('sending');
+
+    try {
+      const { error } = await supabase.functions.invoke('send-marketing-email', {
+        body: {
+          to: lead.email,
+          name: lead.name,
+          first_name: lead.first_name,
+          user_id: lead.id,
+          contact_id: lead.id,
+          template_id: template.id,
+          subject: replaceVariables(template.subject),
+          content: replaceVariables(template.content),
+          commercial_id: commercial.id,
+          domain: selectedDomain,
+          step: selectedStep
+        }
+      });
+
+      if (error) throw error;
+
+      setEmailStatus('sent');
+      toast({
+        title: "Email envoyé",
+        description: `Email "${template.name}" envoyé à ${lead.email}`
+      });
+    } catch (error) {
+      console.error('Error sending email:', error);
+      setEmailStatus('error');
+      toast({
+        title: "Erreur",
+        description: "Erreur lors de l'envoi de l'email",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const sendSms = async () => {
+    if (!selectedSmsTemplate) {
+      toast({
+        title: "Template requis",
+        description: "Veuillez sélectionner un template SMS",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const template = smsTemplates?.find(t => t.id === selectedSmsTemplate);
+    if (!template) return;
+
+    setSmsStatus('sending');
+
+    try {
+      const { error } = await supabase.functions.invoke('send-marketing-sms', {
+        body: {
+          to: lead.phone,
+          message: replaceVariables(template.content),
+          leadId: lead.id,
+          step: selectedStep
+        }
+      });
+
+      if (error) throw error;
+
+      setSmsStatus('sent');
+      toast({
+        title: "SMS envoyé",
+        description: `SMS "${template.name}" envoyé au ${lead.phone}`
+      });
+    } catch (error) {
+      console.error('Error sending SMS:', error);
+      setSmsStatus('error');
+      toast({
+        title: "Erreur",
+        description: "Erreur lors de l'envoi du SMS",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'sending': return <Clock className="h-4 w-4 text-yellow-400" />;
+      case 'sent': return <CheckCircle className="h-4 w-4 text-green-400" />;
+      case 'error': return <AlertCircle className="h-4 w-4 text-red-400" />;
+      default: return null;
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'sending': return 'Envoi en cours...';
+      case 'sent': return 'Envoyé';
+      case 'error': return 'Erreur';
+      default: return '';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          {/* Mobile: Stack vertically */}
+          <div className="flex flex-col gap-4 md:hidden">
+            <div className="flex items-center justify-between">
+              <Button 
+                onClick={onBack}
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                size="sm"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Retour
+              </Button>
+              <Button 
+                onClick={onLogout}
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                size="sm"
+              >
+                Déconnexion
+              </Button>
+            </div>
+            <div className="text-center">
+              <h1 className="text-xl font-bold text-yellow-400">Envoi Rapide</h1>
+              <p className="text-gray-400 text-sm">
+                {lead.first_name} {lead.name}
+              </p>
+              <p className="text-gray-400 text-sm">
+                {lead.email} - {lead.phone}
+              </p>
+            </div>
+          </div>
+          
+          {/* Desktop: Horizontal layout */}
+          <div className="hidden md:flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button 
+                onClick={onBack}
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Retour
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold text-yellow-400">Envoi Rapide</h1>
+                <p className="text-gray-400">
+                  Contact: {lead.first_name} {lead.name} - {lead.email} - {lead.phone}
+                </p>
+              </div>
+            </div>
+            <Button 
+              onClick={onLogout}
+              variant="outline"
+              className="border-gray-600 text-gray-300 hover:bg-gray-800"
+            >
+              Déconnexion
+            </Button>
+          </div>
+        </div>
+
+        {/* Campaign Step Selector */}
+        <Card className="bg-gray-800 border-gray-700 mb-6">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="text-sm font-medium text-gray-300 mb-2 block">
+                  Étape de campagne
+                </label>
+                <Select value={selectedStep.toString()} onValueChange={(value) => setSelectedStep(parseInt(value))}>
+                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                    <SelectValue placeholder="Sélectionner étape" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 border-gray-600">
+                    <SelectItem value="1" className="text-white">Étape 1 - Premier contact</SelectItem>
+                    <SelectItem value="2" className="text-white">Étape 2 - Relance</SelectItem>
+                    <SelectItem value="3" className="text-white">Étape 3 - Proposition</SelectItem>
+                    <SelectItem value="4" className="text-white">Étape 4 - Négociation</SelectItem>
+                    <SelectItem value="5" className="text-white">Étape 5 - Clôture</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="text-sm text-gray-400">
+                <span className="font-medium text-yellow-400">Étape actuelle: {selectedStep}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Email Templates */}
+          <Card className="bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-white">
+                <Mail className="h-5 w-5" />
+                Email Rapide
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Sélectionnez et envoyez directement
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Select value={selectedEmailTemplate} onValueChange={setSelectedEmailTemplate}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectValue placeholder="Choisir un template email" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  {emailTemplates?.map((template) => (
+                    <SelectItem key={template.id} value={template.id} className="text-white">
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedDomain} onValueChange={(value: 'domain1' | 'domain2') => setSelectedDomain(value)}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectValue placeholder="Choisir un serveur mail" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  <SelectItem value="domain1" className="text-white">
+                    Serveur 1 - Binance
+                  </SelectItem>
+                  <SelectItem value="domain2" className="text-white">
+                    Serveur 2 - BINANCE
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              {selectedEmailTemplate && emailTemplates && (
+                <div className="bg-gray-700 p-3 rounded-lg text-sm">
+                  <p className="text-gray-300">
+                    <strong>Aperçu:</strong> {emailTemplates.find(t => t.id === selectedEmailTemplate)?.subject}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={sendEmail}
+                  disabled={!selectedEmailTemplate || emailStatus === 'sending'}
+                  className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Envoyer Email
+                </Button>
+                {getStatusIcon(emailStatus)}
+                {emailStatus !== 'idle' && (
+                  <span className="text-sm text-gray-400">{getStatusText(emailStatus)}</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* SMS Templates */}
+          <Card className="bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-white">
+                <MessageSquare className="h-5 w-5" />
+                SMS Rapide
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Sélectionnez et envoyez directement
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Select value={selectedSmsTemplate} onValueChange={setSelectedSmsTemplate}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectValue placeholder="Choisir un template SMS" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  {smsTemplates?.map((template) => (
+                    <SelectItem key={template.id} value={template.id} className="text-white">
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {selectedSmsTemplate && smsTemplates && (
+                <div className="bg-gray-700 p-3 rounded-lg text-sm">
+                  <p className="text-gray-300">
+                    <strong>Aperçu:</strong> {replaceVariables(smsTemplates.find(t => t.id === selectedSmsTemplate)?.content || '').substring(0, 50)}...
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={sendSms}
+                  disabled={!selectedSmsTemplate || smsStatus === 'sending'}
+                  className="bg-green-600 hover:bg-green-700 text-white flex-1"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Envoyer SMS
+                </Button>
+                {getStatusIcon(smsStatus)}
+                {smsStatus !== 'idle' && (
+                  <span className="text-sm text-gray-400">{getStatusText(smsStatus)}</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default MessageTemplateSelector;
