@@ -15,6 +15,7 @@ import TemplateEditor from "./pages/TemplateEditor";
 import Commercial from "./pages/Commercial";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import Transaction from "./pages/Transaction";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/commercial" element={<Commercial />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/transaction" element={<Transaction />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
