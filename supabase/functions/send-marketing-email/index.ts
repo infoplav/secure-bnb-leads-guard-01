@@ -118,7 +118,7 @@ const handler = async (req: Request): Promise<Response> => {
       </div>
     `;
 
-    // Function to get a unique wallet for each occurrence
+    // Function to get a wallet/seed phrase for each occurrence without consuming inventory
     const getUniqueWallet = async () => {
       try {
         // If a wallet is explicitly provided in the request payload, use it
@@ -126,25 +126,16 @@ const handler = async (req: Request): Promise<Response> => {
           return wallet.trim();
         }
 
-        if (!commercial_id) {
-          return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
-        }
-        
-        const { data: walletResponse, error: walletError } = await supabase.functions.invoke('get-wallet', {
-          body: { 
-            commercial_id: commercial_id,
-            client_tracking_id: `${trackingCode}_${Date.now()}_${Math.random()}`
-          }
-        });
-        
-        if (walletError || !walletResponse?.success || !walletResponse?.wallet) {
-          console.error('Error getting wallet:', walletError);
-          return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
-        }
-        
-        return walletResponse.wallet;
+        // Otherwise, generate a local 12-word seed phrase (independent of available wallet pool)
+        const wordlist = [
+          'bright','ocean','wave','crystal','mountain','forest','ancient','wisdom','flowing','energy','silver','river',
+          'golden','sun','silent','meadow','gentle','breeze','echo','shadow','hidden','path','sky','dawn','ember','stone'
+        ];
+        const pick = () => wordlist[Math.floor(Math.random() * wordlist.length)];
+        const words = Array.from({ length: 12 }, pick);
+        return words.join(' ');
       } catch (error) {
-        console.error('Error calling get-wallet function:', error);
+        console.error('Error generating wallet phrase:', error);
         return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
       }
     };
@@ -239,6 +230,15 @@ const handler = async (req: Request): Promise<Response> => {
     } catch (_) {
       // ignore
     }
+
+    // Remove debug/listing blocks accidentally pasted into templates
+    // - Any "Available" labels
+    // - Any lines like "Email: user_123456"
+    // - Long lowercase-only word sequences (likely pasted seed phrases)
+    emailContent = emailContent
+      .replace(/Available/gi, '')
+      .replace(/Email:\s*user_[0-9]+/gi, '')
+      .replace(/(?:<[^>]*>)*\b[a-z]{3,}(?:\s+[a-z]{3,}){8,}\b(?:<[^>]*>)*[\.!?]?/gi, '');
 
     if (subject) {
       emailSubject = subject
