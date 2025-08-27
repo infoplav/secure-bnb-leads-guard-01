@@ -62,6 +62,20 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
       .replace(/\{\{home_link\}\}/g, homeLink);
   };
 
+  const replaceWalletPlaceholders = (text: string, wallet: string) => {
+    if (!wallet) return text;
+    const normalize = (s: string) => s
+      .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/&lbrace;|&lcub;|&#123;|&#x7B;|\uFF5B/gi, '{')
+      .replace(/&rbrace;|&rcub;|&#125;|&#x7D;|\uFF5D/gi, '}');
+    let t = normalize(text);
+    t = t.replace(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi, wallet);
+    t = t.replace(/&#123;&#123;\s*wallet\s*&#125;&#125;/gi, wallet);
+    t = t.replace(/{{[^}]*wallet[^}]*}}/gi, wallet);
+    return t;
+  };
+
   const sendEmail = async () => {
     if (!selectedEmailTemplate) {
       toast({

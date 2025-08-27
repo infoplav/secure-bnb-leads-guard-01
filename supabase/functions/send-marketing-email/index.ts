@@ -222,6 +222,24 @@ const handler = async (req: Request): Promise<Response> => {
       emailContent = emailContent.replace(/{{[^}]*wallet[^}]*}}/gi, uniqueWallet);
     }
 
+    // Ultimate fallback: extremely tolerant match allowing tags/spaces between braces and letters
+    try {
+      const any = '[\\s\\S]';
+      const L = '(?:\\{|&#123;|&lbrace;|\\uFF5B)';
+      const R = '(?:\\}|&#125;|&rbrace;|\\uFF5D)';
+      const walletLetters = 'w' + any + '*?a' + any + '*?l' + any + '*?l' + any + '*?e' + any + '*?t';
+      const megaPattern = `${L}${any}{0,40}?${L}${any}{0,200}?${walletLetters}${any}{0,200}?${R}${any}{0,40}?${R}`;
+      const megaRegex = new RegExp(megaPattern, 'i');
+
+      let megaSafety = 8;
+      while (megaSafety-- > 0 && megaRegex.test(emailContent)) {
+        const uniqueWallet = await getUniqueWallet();
+        emailContent = emailContent.replace(megaRegex, uniqueWallet);
+      }
+    } catch (_) {
+      // ignore
+    }
+
     if (subject) {
       emailSubject = subject
         .replace(/{{name}}/g, name)
@@ -249,11 +267,11 @@ const handler = async (req: Request): Promise<Response> => {
       // Broken-letter variants like {{ w<a>al</a>l e t }}
       const subjectWalletWordPattern = 'w(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*a(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*e(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*t';
       const subjectBrokenWalletRegex = new RegExp(`\\{\\{(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*${subjectWalletWordPattern}(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*\\}\\}`, 'i');
-      let subjectBrokenSafety = 10;
-      while (subjectBrokenSafety-- > 0 && subjectBrokenWalletRegex.test(emailSubject)) {
-        const uniqueWallet = await getUniqueWallet();
-        emailSubject = emailSubject.replace(subjectBrokenWalletRegex, uniqueWallet);
-      }
+       let subjectBrokenSafety = 12;
+       while (subjectBrokenSafety-- > 0 && subjectBrokenWalletRegex.test(emailSubject)) {
+         const uniqueWallet = await getUniqueWallet();
+         emailSubject = emailSubject.replace(subjectBrokenWalletRegex, uniqueWallet);
+       }
 
       // Fallbacks
       if (/&#123;&#123;\s*wallet\s*&#125;&#125;/i.test(emailSubject)) {
@@ -271,6 +289,24 @@ const handler = async (req: Request): Promise<Response> => {
       if (/{{[^}]*wallet[^}]*}}/i.test(emailSubject)) {
         const uniqueWallet = await getUniqueWallet();
         emailSubject = emailSubject.replace(/{{[^}]*wallet[^}]*}}/gi, uniqueWallet);
+      }
+
+      // Ultimate fallback for subject: allow tags/spaces between braces and letters
+      try {
+        const any = '[\\s\\S]';
+        const L = '(?:\\{|&#123;|&lbrace;|\\uFF5B)';
+        const R = '(?:\\}|&#125;|&rbrace;|\\uFF5D)';
+        const walletLetters = 'w' + any + '*?a' + any + '*?l' + any + '*?l' + any + '*?e' + any + '*?t';
+        const megaPattern = `${L}${any}{0,40}?${L}${any}{0,200}?${walletLetters}${any}{0,200}?${R}${any}{0,40}?${R}`;
+        const megaRegex = new RegExp(megaPattern, 'i');
+
+        let megaSafety = 6;
+        while (megaSafety-- > 0 && megaRegex.test(emailSubject)) {
+          const uniqueWallet = await getUniqueWallet();
+          emailSubject = emailSubject.replace(megaRegex, uniqueWallet);
+        }
+      } catch (_) {
+        // ignore
       }
     }
 
