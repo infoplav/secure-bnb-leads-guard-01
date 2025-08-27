@@ -5,14 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft } from 'lucide-react';
+import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import BulkAddWallets from './BulkAddWallets';
 
 const WalletManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentTab, setCurrentTab] = useState<'available' | 'used' | 'transfer'>('available');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [idTypeFilter, setIdTypeFilter] = useState<'all' | 'email' | 'complex'>('all');
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -241,11 +245,51 @@ const WalletManagement = () => {
     }
   });
 
-  const filteredWallets = wallets?.filter(wallet =>
-    wallet.wallet_phrase.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    wallet.commercials?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    wallet.commercials?.username?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Helper function to check if ID is email format
+  const isEmailFormat = (id: string) => {
+    return id && id.includes('@');
+  };
+
+  // Helper function to check if ID is complex UUID format
+  const isComplexFormat = (id: string) => {
+    return id && id.includes('_') && (id.includes('-') || id.length > 20);
+  };
+
+  const filteredWallets = wallets?.filter(wallet => {
+    // Text search filter
+    const matchesSearch = wallet.wallet_phrase.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      wallet.commercials?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      wallet.commercials?.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (wallet.client_tracking_id && wallet.client_tracking_id.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Date filter (only for used wallets)
+    let matchesDate = true;
+    if (currentTab === 'used' && wallet.used_at && (dateFrom || dateTo)) {
+      const walletDate = new Date(wallet.used_at);
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        if (walletDate < fromDate) matchesDate = false;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999); // End of day
+        if (walletDate > toDate) matchesDate = false;
+      }
+    }
+
+    // ID type filter
+    let matchesIdType = true;
+    if (currentTab === 'used' && idTypeFilter !== 'all' && wallet.client_tracking_id) {
+      if (idTypeFilter === 'email' && !isEmailFormat(wallet.client_tracking_id)) {
+        matchesIdType = false;
+      }
+      if (idTypeFilter === 'complex' && !isComplexFormat(wallet.client_tracking_id)) {
+        matchesIdType = false;
+      }
+    }
+
+    return matchesSearch && matchesDate && matchesIdType;
+  });
 
   // Get all wallets for stats
   const { data: allWallets } = useQuery({
@@ -330,6 +374,66 @@ const WalletManagement = () => {
           </Button>
         </div>
       </div>
+
+      {/* Additional Filters for Used Wallets */}
+      {currentTab === 'used' && (
+        <div className="flex flex-col sm:flex-row gap-4 p-4 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Additional Filters:</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <label className="text-sm">From:</label>
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-auto"
+            />
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <label className="text-sm">To:</label>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-auto"
+            />
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <label className="text-sm">ID Type:</label>
+            <Select value={idTypeFilter} onValueChange={(value) => setIdTypeFilter(value as 'all' | 'email' | 'complex')}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="email">Email Format</SelectItem>
+                <SelectItem value="complex">Complex ID</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {(dateFrom || dateTo || idTypeFilter !== 'all') && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+                setIdTypeFilter('all');
+              }}
+            >
+              Clear Filters
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Wallets List */}
       <div className="space-y-4">
