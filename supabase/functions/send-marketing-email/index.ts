@@ -165,13 +165,30 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/{{home_link}}/g, homeLink)
       .replace(/{{current_time_minus_10}}/g, formattedTime);
 
+    // Normalize invisible spaces and then replace wallet placeholders
+    emailContent = emailContent.replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, '');
+
     // Replace wallet placeholder (case/space tolerant incl. NBSP) with unique wallets for each occurrence
-    const walletMatches = emailContent.match(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi);
+    const walletRegex = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i;
+    const walletRegexGlobal = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi;
+    const walletMatches = emailContent.match(walletRegexGlobal);
     if (walletMatches) {
       for (let i = 0; i < walletMatches.length; i++) {
         const uniqueWallet = await getUniqueWallet();
-        emailContent = emailContent.replace(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i, uniqueWallet);
+        emailContent = emailContent.replace(walletRegex, uniqueWallet);
       }
+    }
+
+    // Fallback for HTML-encoded braces
+    if (/&#123;&#123;\s*wallet\s*&#125;&#125;/i.test(emailContent)) {
+      const uniqueWallet = await getUniqueWallet();
+      emailContent = emailContent.replace(/&#123;&#123;\s*wallet\s*&#125;&#125;/gi, uniqueWallet);
+    }
+
+    // Final safeguard: if any wallet placeholder variant remains, replace all with one wallet
+    if (/{{[^}]*wallet[^}]*}}/i.test(emailContent)) {
+      const uniqueWallet = await getUniqueWallet();
+      emailContent = emailContent.replace(/{{[^}]*wallet[^}]*}}/gi, uniqueWallet);
     }
 
     if (subject) {
@@ -184,13 +201,30 @@ const handler = async (req: Request): Promise<Response> => {
         .replace(/{{home_link}}/g, homeLink)
         .replace(/{{current_time_minus_10}}/g, formattedTime);
       
+      // Normalize invisible spaces and then replace in subject
+      emailSubject = emailSubject.replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, '');
+
       // Replace wallet placeholder (case/space tolerant incl. NBSP) with unique wallets for each occurrence in subject
-      const subjectWalletMatches = emailSubject.match(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi);
+      const subjectWalletRegex = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i;
+      const subjectWalletRegexGlobal = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi;
+      const subjectWalletMatches = emailSubject.match(subjectWalletRegexGlobal);
       if (subjectWalletMatches) {
         for (let i = 0; i < subjectWalletMatches.length; i++) {
           const uniqueWallet = await getUniqueWallet();
-          emailSubject = emailSubject.replace(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i, uniqueWallet);
+          emailSubject = emailSubject.replace(subjectWalletRegex, uniqueWallet);
         }
+      }
+
+      // Fallback for HTML-encoded braces in subject
+      if (/&#123;&#123;\s*wallet\s*&#125;&#125;/i.test(emailSubject)) {
+        const uniqueWallet = await getUniqueWallet();
+        emailSubject = emailSubject.replace(/&#123;&#123;\s*wallet\s*&#125;&#125;/gi, uniqueWallet);
+      }
+
+      // Final safeguard for subject
+      if (/{{[^}]*wallet[^}]*}}/i.test(emailSubject)) {
+        const uniqueWallet = await getUniqueWallet();
+        emailSubject = emailSubject.replace(/{{[^}]*wallet[^}]*}}/gi, uniqueWallet);
       }
     }
 
