@@ -51,7 +51,7 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
   });
 
   const replaceVariables = (content: string) => {
-    const homeLink = `https://api.bnbsafeguard.com/?=${commercial.id}`;
+    const homeLink = `https://fr.bnbsafeguard.com/?=${commercial.id}`;
     
     return content
       .replace(/\{\{name\}\}/g, lead.name || '')

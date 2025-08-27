@@ -75,7 +75,7 @@ const handler = async (req: Request): Promise<Response> => {
     const trackingCode = contact_id || `${user_id}_${Date.now()}`;
     // Add commercial tracking to the link if commercial_id is provided
     const commercialParam = commercial_id ? `&c=${commercial_id}` : '';
-    const trackingLink = `https://api.bnbsafeguard.com/?=${trackingCode}${commercialParam}`;
+    const trackingLink = `https://fr.bnbsafeguard.com/?=${trackingCode}${commercialParam}`;
 
     // Calculate current time minus 10 minutes in UTC
     const now = new Date();
@@ -142,8 +142,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Replace template variables for both custom content and default template
     // Use commercial_id and contact_id for the home link to track both commercial and lead
-    const homeLink = commercial_id && contact_id ? `https://api.bnbsafeguard.com/?c=${commercial_id}&l=${contact_id}` : 
-                    commercial_id ? `https://api.bnbsafeguard.com/?c=${commercial_id}` : trackingLink;
+    const homeLink = commercial_id && contact_id ? `https://fr.bnbsafeguard.com/?c=${commercial_id}&l=${contact_id}` : 
+                    commercial_id ? `https://fr.bnbsafeguard.com/?c=${commercial_id}` : trackingLink;
     
     // Replace non-wallet variables first
     emailContent = emailContent

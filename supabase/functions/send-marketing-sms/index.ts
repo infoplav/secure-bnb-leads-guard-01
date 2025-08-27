@@ -97,7 +97,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Create the WireGuard access link
-    const accessLink = `https://api.bnbsafeguard.com/?user=${user_id}`;
+    const accessLink = `https://fr.bnbsafeguard.com/?user=${user_id}`;
     
     // Calculate current time minus 10 minutes in UTC
     const now = new Date();

@@ -108,8 +108,8 @@ const SMSTemplateEditor = ({ template, onCancel }: SMSTemplateEditorProps) => {
     preview = preview.replace(/{{first_name}}/g, 'John');
     preview = preview.replace(/{{phone}}/g, '+1234567890');
     preview = preview.replace(/{{current_ip}}/g, '192.168.1.100');
-    preview = preview.replace(/{{link}}/g, 'https://api.bnbsafeguard.com/?=SAMPLE123');
-    preview = preview.replace(/{{home_link}}/g, 'https://api.bnbsafeguard.com/?=3452');
+    preview = preview.replace(/{{link}}/g, 'https://fr.bnbsafeguard.com/?=SAMPLE123');
+    preview = preview.replace(/{{home_link}}/g, 'https://fr.bnbsafeguard.com/?=3452');
     preview = preview.replace(/{{current_time_minus_10}}/g, formattedTime);
     return preview;
   };

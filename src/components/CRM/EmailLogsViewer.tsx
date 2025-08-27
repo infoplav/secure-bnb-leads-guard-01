@@ -206,7 +206,7 @@ const EmailLogsViewer = () => {
                         {log.commercial_id && (
                           <div className="flex items-center gap-2">
                             <code className="text-xs bg-gray-700 px-2 py-1 rounded">
-                              api.bnbsafeguard.com/?={log.commercial_id}
+                              fr.bnbsafeguard.com/?={log.commercial_id}
                             </code>
                             <ExternalLink className="h-3 w-3 text-gray-400" />
                           </div>
