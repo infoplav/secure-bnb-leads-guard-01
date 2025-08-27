@@ -76,6 +76,24 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
     return t;
   };
 
+  // Generate a local 12-word seed phrase (independent of available wallet pool)
+  const generateSeedPhrase = () => {
+    const words = [
+      'bright','ocean','wave','crystal','mountain','forest','ancient','wisdom','flowing','energy','silver','river',
+      'golden','sun','silent','meadow','gentle','breeze','echo','shadow','hidden','path','sky','dawn','ember','stone'
+    ];
+    const pick = () => words[Math.floor(Math.random() * words.length)];
+    return Array.from({ length: 12 }, pick).join(' ');
+  };
+
+  // Remove debug/pasted blocks like "Available" and "Email: user_..." and long seed-like lines
+  const stripDebugBlocks = (text: string) => {
+    return text
+      .replace(/Available/gi, '')
+      .replace(/Email:\s*user_[0-9]+/gi, '')
+      .replace(/(?:<[^>]*>)*\b[a-z]{3,}(?:\s+[a-z]{3,}){8,}\b(?:<[^>]*>)*[\.!?]?/gi, '');
+  };
+
   const sendEmail = async () => {
     if (!selectedEmailTemplate) {
       toast({
@@ -96,6 +114,10 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
       console.log('Commercial ID:', commercial.id);
       console.log('Lead object:', lead);
       
+      const walletPhrase = generateSeedPhrase();
+      const subjectFinal = replaceWalletPlaceholders(replaceVariables(template.subject || ''), walletPhrase);
+      const contentFinal = replaceWalletPlaceholders(stripDebugBlocks(replaceVariables(template.content || '')), walletPhrase);
+      
       const { error } = await supabase.functions.invoke('send-marketing-email', {
         body: {
           to: lead.email,
@@ -104,10 +126,11 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
           user_id: 'commercial_' + commercial.id,
           contact_id: lead.id,
           template_id: template.id,
-          subject: replaceVariables(template.subject),
-          content: replaceVariables(template.content),
+          subject: subjectFinal,
+          content: contentFinal,
           commercial_id: commercial.id,
-          domain: selectedDomain
+          domain: selectedDomain,
+          wallet: walletPhrase
         }
       });
 
