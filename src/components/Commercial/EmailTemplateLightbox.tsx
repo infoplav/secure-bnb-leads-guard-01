@@ -59,7 +59,9 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
       .replace(/\{\{email\}\}/g, lead.email || '')
       .replace(/\{\{phone\}\}/g, lead.phone || '')
       .replace(/\{\{commercial_name\}\}/g, commercial.name || '')
-      .replace(/\{\{home_link\}\}/g, homeLink);
+      .replace(/\{\{home_link\}\}/g, homeLink)
+      .replace(/\{\{link\}\}/g, homeLink)
+      .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
   };
 
   const replaceWalletPlaceholders = (text: string, wallet: string) => {

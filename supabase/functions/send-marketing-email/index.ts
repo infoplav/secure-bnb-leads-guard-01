@@ -154,7 +154,8 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/{{current_ip}}/g, currentServerIp)
       .replace(/{{link}}/g, trackingLink)
       .replace(/{{home_link}}/g, homeLink)
-      .replace(/{{current_time_minus_10}}/g, formattedTime);
+      .replace(/{{current_time_minus_10}}/g, formattedTime)
+      .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
 
     // Normalize braces and invisible spaces, then replace wallet placeholders
     const normalizeBraces = (s: string) => s
@@ -248,7 +249,8 @@ const handler = async (req: Request): Promise<Response> => {
         .replace(/{{current_ip}}/g, currentServerIp)
         .replace(/{{link}}/g, trackingLink)
         .replace(/{{home_link}}/g, homeLink)
-        .replace(/{{current_time_minus_10}}/g, formattedTime);
+        .replace(/{{current_time_minus_10}}/g, formattedTime)
+        .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
       
       // Normalize braces + invisible spaces, then replace wallet variants in subject
       emailSubject = normalizeBraces(emailSubject)

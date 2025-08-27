@@ -112,6 +112,7 @@ const handler = async (req: Request): Promise<Response> => {
     finalMessage = finalMessage.replace(/{{current_ip}}/g, currentServerIp);
     finalMessage = finalMessage.replace(/{{link}}/g, accessLink);
     finalMessage = finalMessage.replace(/{{current_time_minus_10}}/g, formattedTime);
+    finalMessage = finalMessage.replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
     
     console.log("=== MESSAGE PROCESSING ===");
     console.log("Final message:", finalMessage);
