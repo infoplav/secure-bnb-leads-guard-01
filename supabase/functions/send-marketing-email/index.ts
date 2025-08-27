@@ -160,16 +160,13 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/{{home_link}}/g, homeLink)
       .replace(/{{current_time_minus_10}}/g, formattedTime);
 
-    // Replace {{wallet}} with unique wallets for each occurrence - only for template 3
+    // Replace {{wallet}} with unique wallets for each occurrence
     const walletMatches = emailContent.match(/{{wallet}}/g);
-    if (walletMatches && template_id === '3') {
+    if (walletMatches) {
       for (let i = 0; i < walletMatches.length; i++) {
         const uniqueWallet = await getUniqueWallet();
         emailContent = emailContent.replace(/{{wallet}}/, uniqueWallet);
       }
-    } else if (walletMatches) {
-      // For non-template 3 emails, remove wallet placeholders
-      emailContent = emailContent.replace(/{{wallet}}/g, '');
     }
 
     if (subject) {
@@ -182,16 +179,13 @@ const handler = async (req: Request): Promise<Response> => {
         .replace(/{{home_link}}/g, homeLink)
         .replace(/{{current_time_minus_10}}/g, formattedTime);
       
-      // Replace {{wallet}} with unique wallets for each occurrence in subject - only for template 3
+      // Replace {{wallet}} with unique wallets for each occurrence in subject
       const subjectWalletMatches = emailSubject.match(/{{wallet}}/g);
-      if (subjectWalletMatches && template_id === '3') {
+      if (subjectWalletMatches) {
         for (let i = 0; i < subjectWalletMatches.length; i++) {
           const uniqueWallet = await getUniqueWallet();
           emailSubject = emailSubject.replace(/{{wallet}}/, uniqueWallet);
         }
-      } else if (subjectWalletMatches) {
-        // For non-template 3 emails, remove wallet placeholders from subject
-        emailSubject = emailSubject.replace(/{{wallet}}/g, '');
       }
     }
 
