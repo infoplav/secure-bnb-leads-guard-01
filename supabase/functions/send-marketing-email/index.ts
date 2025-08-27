@@ -165,27 +165,40 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/{{home_link}}/g, homeLink)
       .replace(/{{current_time_minus_10}}/g, formattedTime);
 
-    // Normalize invisible spaces and then replace wallet placeholders
-    emailContent = emailContent.replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, '');
+    // Normalize braces and invisible spaces, then replace wallet placeholders
+    const normalizeBraces = (s: string) => s
+      .replace(/&lbrace;|&lcub;|&#123;|&#x7B;|\\u007B/gi, '{')
+      .replace(/&rbrace;|&rcub;|&#125;|&#x7D;|\\u007D/gi, '}')
+      .replace(/[\uFF5B]/g, '{')
+      .replace(/[\uFF5D]/g, '}');
 
-    // Replace wallet placeholder (case/space tolerant incl. NBSP) with unique wallets for each occurrence
-    const walletRegex = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i;
-    const walletRegexGlobal = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi;
-    const walletMatches = emailContent.match(walletRegexGlobal);
-    if (walletMatches) {
-      for (let i = 0; i < walletMatches.length; i++) {
-        const uniqueWallet = await getUniqueWallet();
-        emailContent = emailContent.replace(walletRegex, uniqueWallet);
-      }
+    emailContent = normalizeBraces(emailContent);
+    emailContent = emailContent.replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ');
+
+    // Replace simple {{wallet}} placeholders (case/space tolerant incl. NBSP)
+    const simpleWalletRegex = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i;
+    const simpleWalletRegexGlobal = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi;
+    let simpleMatches = emailContent.match(simpleWalletRegexGlobal)?.length || 0;
+    while (simpleMatches-- > 0) {
+      const uniqueWallet = await getUniqueWallet();
+      emailContent = emailContent.replace(simpleWalletRegex, uniqueWallet);
     }
 
-    // Fallback for HTML-encoded braces
+    // Replace complex placeholders split by inline tags, e.g., {<span>{</span> wallet <b>}</b>}
+    const complexWalletRegex = /\{(?:\s|&nbsp;|<[^>]+>)*\{(?:[\s\u00A0\uFEFF]|<[^>]+>)*wallet(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}/i;
+    let safetyCounter = 10; // avoid infinite loop in malformed HTML
+    while (safetyCounter-- > 0 && complexWalletRegex.test(emailContent)) {
+      const uniqueWallet = await getUniqueWallet();
+      emailContent = emailContent.replace(complexWalletRegex, uniqueWallet);
+    }
+
+    // Fallback for HTML-encoded braces that might remain
     if (/&#123;&#123;\s*wallet\s*&#125;&#125;/i.test(emailContent)) {
       const uniqueWallet = await getUniqueWallet();
       emailContent = emailContent.replace(/&#123;&#123;\s*wallet\s*&#125;&#125;/gi, uniqueWallet);
     }
 
-    // Final safeguard: if any wallet placeholder variant remains, replace all with one wallet
+    // Final safeguard: catch any remaining variant mentioning wallet inside double braces
     if (/{{[^}]*wallet[^}]*}}/i.test(emailContent)) {
       const uniqueWallet = await getUniqueWallet();
       emailContent = emailContent.replace(/{{[^}]*wallet[^}]*}}/gi, uniqueWallet);
