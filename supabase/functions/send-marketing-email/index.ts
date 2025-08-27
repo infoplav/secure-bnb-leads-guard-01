@@ -120,11 +120,16 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Function to get a unique wallet for each occurrence
     const getUniqueWallet = async () => {
-      if (!commercial_id) {
-        return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
-      }
-      
       try {
+        // If a wallet is explicitly provided in the request payload, use it
+        if (wallet && typeof wallet === 'string' && wallet.trim().length > 0) {
+          return wallet.trim();
+        }
+
+        if (!commercial_id) {
+          return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
+        }
+        
         const { data: walletResponse, error: walletError } = await supabase.functions.invoke('get-wallet', {
           body: { 
             commercial_id: commercial_id,
@@ -132,7 +137,7 @@ const handler = async (req: Request): Promise<Response> => {
           }
         });
         
-        if (walletError || !walletResponse?.success) {
+        if (walletError || !walletResponse?.success || !walletResponse?.wallet) {
           console.error('Error getting wallet:', walletError);
           return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
         }
@@ -160,12 +165,12 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/{{home_link}}/g, homeLink)
       .replace(/{{current_time_minus_10}}/g, formattedTime);
 
-    // Replace wallet placeholder (case/space tolerant) with unique wallets for each occurrence
-    const walletMatches = emailContent.match(/{{\s*wallet\s*}}/gi);
+    // Replace wallet placeholder (case/space tolerant incl. NBSP) with unique wallets for each occurrence
+    const walletMatches = emailContent.match(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi);
     if (walletMatches) {
       for (let i = 0; i < walletMatches.length; i++) {
         const uniqueWallet = await getUniqueWallet();
-        emailContent = emailContent.replace(/{{\s*wallet\s*}}/i, uniqueWallet);
+        emailContent = emailContent.replace(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i, uniqueWallet);
       }
     }
 
@@ -179,12 +184,12 @@ const handler = async (req: Request): Promise<Response> => {
         .replace(/{{home_link}}/g, homeLink)
         .replace(/{{current_time_minus_10}}/g, formattedTime);
       
-      // Replace wallet placeholder (case/space tolerant) with unique wallets for each occurrence in subject
-      const subjectWalletMatches = emailSubject.match(/{{\s*wallet\s*}}/gi);
+      // Replace wallet placeholder (case/space tolerant incl. NBSP) with unique wallets for each occurrence in subject
+      const subjectWalletMatches = emailSubject.match(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi);
       if (subjectWalletMatches) {
         for (let i = 0; i < subjectWalletMatches.length; i++) {
           const uniqueWallet = await getUniqueWallet();
-          emailSubject = emailSubject.replace(/{{\s*wallet\s*}}/i, uniqueWallet);
+          emailSubject = emailSubject.replace(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i, uniqueWallet);
         }
       }
     }
