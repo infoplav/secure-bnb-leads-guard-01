@@ -71,10 +71,50 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
       .replace(/\u00A0/g, ' ')
       .replace(/&lbrace;|&lcub;|&#123;|&#x7B;|\uFF5B/gi, '{')
       .replace(/&rbrace;|&rcub;|&#125;|&#x7D;|\uFF5D/gi, '}');
+
     let t = normalize(text);
-    t = t.replace(/{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi, wallet);
+
+    // Simple {{wallet}} with optional spaces/nbsp/zero-width
+    t = t.replace(/{{[\s\u00A0\u200B\u200C\u200D\uFEFF]*wallet[\s\u00A0\u200B\u200C\u200D\uFEFF]*}}/gi, wallet);
+    // HTML-encoded braces
     t = t.replace(/&#123;&#123;\s*wallet\s*&#125;&#125;/gi, wallet);
-    t = t.replace(/{{[^}]*wallet[^}]*}}/gi, wallet);
+    // Triple braces {{{wallet}}}
+    t = t.replace(/\{\{\{[^}]*wallet[^}]*\}\}\}/gi, wallet);
+
+    // Broken-letter variants like {{ w<a>al</a>l e t }}
+    const walletWordPattern = 'w(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*a(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*e(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*t';
+    const brokenWalletRegex = new RegExp(`\\{\\{(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*${walletWordPattern}(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*\\}\\}`, 'ig');
+    let brokenSafety = 10;
+    while (brokenSafety-- > 0 && brokenWalletRegex.test(t)) {
+      t = t.replace(brokenWalletRegex, wallet);
+    }
+
+    // Complex placeholders split by inline tags around braces
+    const complexWalletRegex = /\{(?:\s|&nbsp;|<[^>]+>)*\{(?:[\s\u00A0\uFEFF]|<[^>]+>)*wallet(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}/i;
+    let safetyCounter = 10;
+    while (safetyCounter-- > 0 && complexWalletRegex.test(t)) {
+      t = t.replace(complexWalletRegex, wallet);
+    }
+
+    // Final safeguards
+    if (/{{[^}]*wallet[^}]*}}/i.test(t)) {
+      t = t.replace(/{{[^}]*wallet[^}]*}}/gi, wallet);
+    }
+
+    // Ultimate fallback: allow tags/spaces between braces and letters
+    try {
+      const any = '[\\s\\S]';
+      const L = '(?:\\{|&#123;|&lbrace;|\\uFF5B)';
+      const R = '(?:\\}|&#125;|&rbrace;|\\uFF5D)';
+      const walletLetters = 'w' + any + '*?a' + any + '*?l' + any + '*?l' + any + '*?e' + any + '*?t';
+      const megaPattern = `${L}${any}{0,40}?${L}${any}{0,200}?${walletLetters}${any}{0,200}?${R}${any}{0,40}?${R}`;
+      const megaRegex = new RegExp(megaPattern, 'i');
+      let megaSafety = 8;
+      while (megaSafety-- > 0 && megaRegex.test(t)) {
+        t = t.replace(megaRegex, wallet);
+      }
+    } catch {}
+
     return t;
   };
 
