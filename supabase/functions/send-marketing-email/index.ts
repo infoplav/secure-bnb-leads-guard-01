@@ -238,8 +238,8 @@ const handler = async (req: Request): Promise<Response> => {
     // - Long lowercase-only word sequences (likely pasted seed phrases)
     emailContent = emailContent
       .replace(/Available/gi, '')
-      .replace(/Email:\s*user_[0-9]+/gi, '')
-      .replace(/(?:<[^>]*>)*\b[a-z]{3,}(?:\s+[a-z]{3,}){8,}\b(?:<[^>]*>)*[\.!?]?/gi, '');
+      .replace(/Email:\s*user_[0-9]+/gi, '');
+      // Removed aggressive seed-like sequence stripping to preserve intended wallet phrases
 
     if (subject) {
       emailSubject = subject
