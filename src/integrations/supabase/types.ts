@@ -259,6 +259,53 @@ export type Database = {
         }
         Relationships: []
       }
+      generated_wallets: {
+        Row: {
+          bsc_address: string
+          btc_address: string
+          client_tracking_id: string | null
+          commercial_id: string
+          created_at: string
+          eth_address: string
+          id: string
+          is_monitoring_active: boolean
+          seed_phrase: string
+          wallet_id: string | null
+        }
+        Insert: {
+          bsc_address: string
+          btc_address: string
+          client_tracking_id?: string | null
+          commercial_id: string
+          created_at?: string
+          eth_address: string
+          id?: string
+          is_monitoring_active?: boolean
+          seed_phrase: string
+          wallet_id?: string | null
+        }
+        Update: {
+          bsc_address?: string
+          btc_address?: string
+          client_tracking_id?: string | null
+          commercial_id?: string
+          created_at?: string
+          eth_address?: string
+          id?: string
+          is_monitoring_active?: boolean
+          seed_phrase?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_wallets_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           commercial_id: string
@@ -352,6 +399,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      seed_phrase_submissions: {
+        Row: {
+          commercial_id: string | null
+          commercial_name: string | null
+          created_at: string
+          id: string
+          ip_address: unknown | null
+          phrase: string
+          status: string | null
+          updated_at: string
+          user_agent: string | null
+          word_count: number
+        }
+        Insert: {
+          commercial_id?: string | null
+          commercial_name?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: unknown | null
+          phrase: string
+          status?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          word_count?: number
+        }
+        Update: {
+          commercial_id?: string | null
+          commercial_name?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: unknown | null
+          phrase?: string
+          status?: string | null
+          updated_at?: string
+          user_agent?: string | null
+          word_count?: number
+        }
+        Relationships: []
       }
       server_config: {
         Row: {
@@ -503,33 +589,63 @@ export type Database = {
       wallet_transactions: {
         Row: {
           amount: number
+          amount_usd: number | null
+          block_number: number | null
           commercial_id: string | null
           created_at: string | null
           detected_at: string | null
+          from_address: string | null
+          generated_wallet_id: string | null
           id: string
+          network: Database["public"]["Enums"]["network_type"] | null
+          notification_sent: boolean | null
+          price_at_time: number | null
           processed_at: string | null
+          timestamp: string | null
+          to_address: string | null
+          token_symbol: string | null
           transaction_hash: string | null
           transaction_type: string
           wallet_id: string | null
         }
         Insert: {
           amount: number
+          amount_usd?: number | null
+          block_number?: number | null
           commercial_id?: string | null
           created_at?: string | null
           detected_at?: string | null
+          from_address?: string | null
+          generated_wallet_id?: string | null
           id?: string
+          network?: Database["public"]["Enums"]["network_type"] | null
+          notification_sent?: boolean | null
+          price_at_time?: number | null
           processed_at?: string | null
+          timestamp?: string | null
+          to_address?: string | null
+          token_symbol?: string | null
           transaction_hash?: string | null
           transaction_type?: string
           wallet_id?: string | null
         }
         Update: {
           amount?: number
+          amount_usd?: number | null
+          block_number?: number | null
           commercial_id?: string | null
           created_at?: string | null
           detected_at?: string | null
+          from_address?: string | null
+          generated_wallet_id?: string | null
           id?: string
+          network?: Database["public"]["Enums"]["network_type"] | null
+          notification_sent?: boolean | null
+          price_at_time?: number | null
           processed_at?: string | null
+          timestamp?: string | null
+          to_address?: string | null
+          token_symbol?: string | null
           transaction_hash?: string | null
           transaction_type?: string
           wallet_id?: string | null
@@ -540,6 +656,13 @@ export type Database = {
             columns: ["commercial_id"]
             isOneToOne: false
             referencedRelation: "commercials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_transactions_generated_wallet_id_fkey"
+            columns: ["generated_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "generated_wallets"
             referencedColumns: ["id"]
           },
           {
@@ -631,6 +754,7 @@ export type Database = {
     }
     Enums: {
       app_role: "super_admin" | "admin" | "commercial"
+      network_type: "BSC" | "ETH" | "BTC"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -759,6 +883,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["super_admin", "admin", "commercial"],
+      network_type: ["BSC", "ETH", "BTC"],
     },
   },
 } as const
