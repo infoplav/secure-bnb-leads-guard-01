@@ -84,6 +84,20 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
       subject: getEmailTemplate(3, commercial.language || 'fr').subject,
       content: getEmailTemplate(3, commercial.language || 'fr').content,
       isPredefined: true
+    },
+    {
+      id: 'predefined-template4',
+      name: 'Email 4 - Activation compte',
+      subject: getEmailTemplate(4, commercial.language || 'fr').subject,
+      content: getEmailTemplate(4, commercial.language || 'fr').content,
+      isPredefined: true
+    },
+    {
+      id: 'predefined-trustwallet',
+      name: 'Trust Wallet - Synchronisation',
+      subject: getEmailTemplate('trustWallet', commercial.language || 'fr').subject,
+      content: getEmailTemplate('trustWallet', commercial.language || 'fr').content,
+      isPredefined: true
     }
   ];
 
@@ -137,6 +151,8 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
         if (template.id === 'predefined-template1') return 1;
         if (template.id === 'predefined-template2') return 2;
         if (template.id === 'predefined-template3') return 3;
+        if (template.id === 'predefined-template4') return 4;
+        if (template.id === 'predefined-trustwallet') return 3; // Trust wallet also uses step 3 with wallet
       }
       
       const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
@@ -144,15 +160,17 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
       if (normalizedName.includes('email1')) return 1;
       if (normalizedName.includes('email2')) return 2;
       if (normalizedName.includes('email3')) return 3;
+      if (normalizedName.includes('email4')) return 4;
+      if (normalizedName.includes('trust')) return 3;
       return 1; // default
     };
 
     const selectedStep = getStepFromTemplate(template);
 
     try {
-      // For step 3, we need to get a wallet if it's a predefined template
+      // For step 3 and 4, we need to get a wallet if it's a predefined template
       let walletPhrase = '';
-      if (selectedStep === 3 && isPredefinedTemplate(template)) {
+      if ((selectedStep === 3 || selectedStep === 4) && isPredefinedTemplate(template)) {
         const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
           body: {
             commercial_id: commercial.id,
@@ -351,7 +369,7 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
         <Card className="bg-gray-800 border-gray-700 mb-6">
           <CardContent className="pt-6">
             <div className="text-center text-gray-300">
-              <p className="text-sm">Email1 → Étape 1 | Email2 → Étape 2 | Email3 → Étape 3 (avec wallet)</p>
+              <p className="text-sm">Email1 → Étape 1 | Email2 → Étape 2 | Email3 → Étape 3 (avec wallet) | Email4 → Étape 4 | Trust Wallet → Étape 3 (avec wallet)</p>
             </div>
           </CardContent>
         </Card>
