@@ -28,11 +28,16 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
     queryFn: async () => {
       const { data, error } = await supabase
         .from('email_templates')
-        .select('*')
-        .order('name');
+        .select('*');
       
       if (error) throw error;
-      return data;
+      
+      // Sort numerically by extracting number from name (email1, email2, etc.)
+      return data?.sort((a, b) => {
+        const numA = parseInt(a.name.match(/\d+/)?.[0] || '0');
+        const numB = parseInt(b.name.match(/\d+/)?.[0] || '0');
+        return numA - numB;
+      }) || [];
     },
   });
 
