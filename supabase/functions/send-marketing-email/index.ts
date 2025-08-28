@@ -217,11 +217,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Only process wallet placeholders if they exist in the content
     console.log('Checking if email content contains wallet placeholders...');
-     const skipWalletByStep = typeof step === 'number' && (step === 1 || step === 2);
-     const walletPlaceholdersDetected = !skipWalletByStep && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
+     const walletPlaceholdersDetected = hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject);
      let walletWasUsed = false;
      if (walletPlaceholdersDetected) {
-       console.log('Wallet placeholders found and step not 1/2, processing wallet replacements...');
+       console.log('Wallet placeholders found, processing wallet replacements...');
       
       // Normalize braces and invisible spaces, then replace wallet placeholders
       const normalizeBraces = (s: string) => s
