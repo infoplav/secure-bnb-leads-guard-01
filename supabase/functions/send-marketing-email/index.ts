@@ -120,6 +120,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Check if the email content contains wallet placeholders
     const hasWalletPlaceholder = (content: string) => {
+      // Simple check for {{wallet}} first
+      if (/\{\{\s*wallet\s*\}\}/i.test(content)) {
+        return true;
+      }
+      
       const normalizedContent = content
         .replace(/&lbrace;|&lcub;|&#123;|&#x7B;|\\u007B/gi, '{')
         .replace(/&rbrace;|&rcub;|&#125;|&#x7D;|\\u007D/gi, '}')
