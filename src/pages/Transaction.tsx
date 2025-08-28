@@ -232,7 +232,7 @@ const Transaction = () => {
                     <div className="p-3 bg-muted/30 rounded-lg border">
                       <div className="text-sm font-medium text-muted-foreground mb-2">Seed Phrase</div>
                       <div className="font-mono text-xs break-all text-foreground bg-background p-2 rounded border">
-                        {wallet.seed_phrase}
+                        {wallet.wallets?.wallet_phrase || wallet.seed_phrase || "Not available"}
                       </div>
                     </div>
 
