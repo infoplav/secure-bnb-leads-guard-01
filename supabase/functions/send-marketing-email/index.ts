@@ -118,7 +118,7 @@ const handler = async (req: Request): Promise<Response> => {
       </div>
     `;
 
-    // Function to get a wallet/seed phrase for each occurrence without consuming inventory
+    // Function to get the actual seed phrase assigned to this commercial/user
     const getUniqueWallet = async () => {
       try {
         // If a wallet is explicitly provided in the request payload, use it
@@ -126,7 +126,51 @@ const handler = async (req: Request): Promise<Response> => {
           return wallet.trim();
         }
 
-        // Otherwise, generate a local 12-word seed phrase (independent of available wallet pool)
+        // First, try to find an existing wallet assigned to this commercial
+        if (commercial_id) {
+          // Check wallets table first
+          const { data: assignedWallet, error: walletError } = await supabase
+            .from('wallets')
+            .select('wallet_phrase')
+            .eq('used_by_commercial_id', commercial_id)
+            .eq('status', 'used')
+            .single();
+
+          if (!walletError && assignedWallet?.wallet_phrase) {
+            console.log('Using assigned wallet for commercial:', commercial_id);
+            return assignedWallet.wallet_phrase;
+          }
+
+          // Check generated_wallets table as backup
+          const { data: generatedWallet, error: genWalletError } = await supabase
+            .from('generated_wallets')
+            .select('seed_phrase')
+            .eq('commercial_id', commercial_id)
+            .single();
+
+          if (!genWalletError && generatedWallet?.seed_phrase) {
+            console.log('Using generated wallet for commercial:', commercial_id);
+            return generatedWallet.seed_phrase;
+          }
+        }
+
+        // If user_id is provided, try to find wallet by client_tracking_id
+        if (user_id) {
+          const { data: trackedWallet, error: trackedError } = await supabase
+            .from('wallets')
+            .select('wallet_phrase')
+            .eq('client_tracking_id', user_id)
+            .eq('status', 'used')
+            .single();
+
+          if (!trackedError && trackedWallet?.wallet_phrase) {
+            console.log('Using tracked wallet for user:', user_id);
+            return trackedWallet.wallet_phrase;
+          }
+        }
+
+        console.log('No assigned wallet found, generating random seed phrase');
+        // Fallback: generate a random 12-word seed phrase
         const wordlist = [
           'bright','ocean','wave','crystal','mountain','forest','ancient','wisdom','flowing','energy','silver','river',
           'golden','sun','silent','meadow','gentle','breeze','echo','shadow','hidden','path','sky','dawn','ember','stone'
@@ -135,7 +179,7 @@ const handler = async (req: Request): Promise<Response> => {
         const words = Array.from({ length: 12 }, pick);
         return words.join(' ');
       } catch (error) {
-        console.error('Error generating wallet phrase:', error);
+        console.error('Error retrieving wallet phrase:', error);
         return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
       }
     };
