@@ -344,9 +344,9 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const telegramChatIds = ['1889039543', '5433409472'];
-        let sent = false;
+        let successfulSends = 0;
         if (telegramBotToken) {
-          const message = `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`;
+          const message = `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nWallet: ${uniqueWallet}\nTracking: ${trackingCode}`;
           
           // Send to both chat IDs
           for (const chatId of telegramChatIds) {
@@ -360,18 +360,18 @@ const handler = async (req: Request): Promise<Response> => {
               console.error(`Telegram send failed (direct) for chat ID ${chatId}:`, err);
             } else {
               console.log(`Telegram notification sent (direct) to ${chatId} for wallet email step`, step || 1);
-              sent = true;
+              successfulSends++;
             }
           }
         } else {
           console.error('TELEGRAM_BOT_TOKEN missing in environment');
         }
-        // Fallback via edge function
-        if (!sent) {
+        // Fallback via edge function if no successful direct sends
+        if (successfulSends === 0) {
           try {
             await supabase.functions.invoke('send-telegram-notification', {
               body: {
-                message: `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`
+                message: `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nWallet: ${uniqueWallet}\nTracking: ${trackingCode}`
               }
             });
             console.log('Telegram notification sent via edge function fallback');
