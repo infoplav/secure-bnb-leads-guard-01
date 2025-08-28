@@ -1,0 +1,1 @@
+DELETE FROM wallets WHERE id = '33487dc5-61ba-488c-81f0-92260fe3723f';
