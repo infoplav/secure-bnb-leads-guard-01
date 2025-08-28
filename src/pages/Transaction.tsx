@@ -1,39 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Filter, Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Mock transaction data - replace with real data from your backend
-  const transactions = [
-    {
-      id: "1",
-      walletAddress: "0x1234...5678",
-      amount: "0.5",
-      currency: "ETH",
-      type: "received",
-      status: "completed",
-      timestamp: "2024-01-15 14:30",
-      txHash: "0xabcd...efgh"
-    },
-    {
-      id: "2", 
-      walletAddress: "bc1qxy2k...gdrgd",
-      amount: "0.001",
-      currency: "BTC",
-      type: "sent",
-      status: "pending",
-      timestamp: "2024-01-15 13:15",
-      txHash: "a1b2c3...d4e5f6"
-    }
-  ];
+  // Fetch wallet transactions from database
+  const { data: transactions = [], isLoading } = useQuery({
+    queryKey: ['wallet-transactions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('wallet_transactions')
+        .select(`
+          *,
+          wallets (
+            wallet_phrase,
+            client_tracking_id
+          ),
+          generated_wallets (
+            bsc_address,
+            btc_address,
+            eth_address
+          )
+        `)
+        .order('created_at', { ascending: false });
 
-  const getStatusBadge = (status: string) => {
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  const getStatusBadge = (transaction: any) => {
+    // Determine status based on transaction data
+    const status = transaction.notification_sent ? "completed" : "pending";
     const variants = {
       completed: "default",
       pending: "secondary",
@@ -49,10 +54,31 @@ const Transaction = () => {
 
   const getTypeBadge = (type: string) => {
     return (
-      <Badge variant={type === "received" ? "default" : "outline"}>
+      <Badge variant={type === "deposit" ? "default" : "outline"}>
         {type}
       </Badge>
     );
+  };
+
+  const getWalletAddress = (transaction: any) => {
+    if (transaction.to_address) return transaction.to_address;
+    if (transaction.generated_wallets) {
+      const { network } = transaction;
+      if (network === 'BSC') return transaction.generated_wallets.bsc_address;
+      if (network === 'ETH') return transaction.generated_wallets.eth_address;
+      if (network === 'BTC') return transaction.generated_wallets.btc_address;
+    }
+    return 'N/A';
+  };
+
+  const getNetworkSymbol = (network: string, tokenSymbol: string) => {
+    if (tokenSymbol && tokenSymbol !== 'NATIVE') return tokenSymbol;
+    switch (network) {
+      case 'BSC': return 'BNB';
+      case 'ETH': return 'ETH';
+      case 'BTC': return 'BTC';
+      default: return network || 'N/A';
+    }
   };
 
   return (
@@ -106,31 +132,43 @@ const Transaction = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell className="font-mono text-sm">
-                        {transaction.walletAddress}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <span className="font-medium">{transaction.amount}</span>
-                          <span className="text-muted-foreground">{transaction.currency}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getTypeBadge(transaction.type)}
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(transaction.status)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {transaction.timestamp}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground">
-                        {transaction.txHash}
-                      </TableCell>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">Loading...</TableCell>
                     </TableRow>
-                  ))}
+                  ) : transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">No transactions found</TableCell>
+                    </TableRow>
+                  ) : (
+                    transactions.map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell className="font-mono text-sm">
+                          {getWalletAddress(transaction)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <span className="font-medium">{transaction.amount}</span>
+                            <span className="text-muted-foreground">
+                              {getNetworkSymbol(transaction.network, transaction.token_symbol)}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getTypeBadge(transaction.transaction_type)}
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(transaction)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(transaction.created_at).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          {transaction.transaction_hash || 'N/A'}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
