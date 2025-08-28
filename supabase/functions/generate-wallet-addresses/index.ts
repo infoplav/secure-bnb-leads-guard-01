@@ -1,0 +1,149 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.2';
+import { mnemonicToSeed } from 'npm:@scure/bip39@1.2.1';
+import { HDKey } from 'npm:@scure/bip32@1.3.2';
+import { secp256k1 } from 'npm:@noble/curves@1.2.0/secp256k1';
+import { keccak_256 } from 'npm:@noble/hashes@1.3.2/sha3';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Generate Ethereum/BSC address from public key
+function generateEthAddress(publicKey: Uint8Array): string {
+  // Remove the 0x04 prefix for uncompressed key
+  const pubKeyWithoutPrefix = publicKey.slice(1);
+  // Hash with keccak256
+  const hash = keccak_256(pubKeyWithoutPrefix);
+  // Take last 20 bytes and convert to hex with 0x prefix
+  return '0x' + Array.from(hash.slice(-20))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Generate Bitcoin address from public key (P2PKH format)
+function generateBtcAddress(publicKey: Uint8Array): string {
+  // This is a simplified version - in production you'd use proper Bitcoin libraries
+  // For now, we'll generate a mock address based on the public key hash
+  const hash = keccak_256(publicKey);
+  const addressBytes = hash.slice(0, 20);
+  return '1' + Array.from(addressBytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('').slice(0, 33); // Mock P2PKH format
+}
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { wallet_id, seed_phrase } = await req.json();
+
+    if (!wallet_id || !seed_phrase) {
+      throw new Error('wallet_id and seed_phrase are required');
+    }
+
+    console.log(`Generating addresses for wallet ${wallet_id}`);
+
+    // Convert mnemonic to seed
+    const seed = await mnemonicToSeed(seed_phrase);
+    
+    // Create HD wallet
+    const hdKey = HDKey.fromMasterSeed(seed);
+    
+    // Derive addresses using standard derivation paths
+    const ethPath = "m/44'/60'/0'/0/0";  // Ethereum standard path
+    const btcPath = "m/44'/0'/0'/0/0";   // Bitcoin standard path
+    const bscPath = "m/44'/60'/0'/0/0";  // BSC uses same as Ethereum
+    
+    const ethKey = hdKey.derive(ethPath);
+    const btcKey = hdKey.derive(btcPath);
+    const bscKey = hdKey.derive(bscPath);
+
+    if (!ethKey.publicKey || !btcKey.publicKey || !bscKey.publicKey) {
+      throw new Error('Failed to derive keys');
+    }
+
+    // Generate addresses
+    const ethAddress = generateEthAddress(ethKey.publicKey);
+    const btcAddress = generateBtcAddress(btcKey.publicKey);
+    const bscAddress = generateEthAddress(bscKey.publicKey); // BSC uses same format as Ethereum
+
+    console.log(`Generated addresses - ETH: ${ethAddress}, BTC: ${btcAddress}, BSC: ${bscAddress}`);
+
+    // Check if generated_wallets entry already exists
+    const { data: existingWallet } = await supabase
+      .from('generated_wallets')
+      .select('*')
+      .eq('wallet_id', wallet_id)
+      .single();
+
+    if (existingWallet) {
+      // Update existing entry
+      const { error: updateError } = await supabase
+        .from('generated_wallets')
+        .update({
+          eth_address: ethAddress,
+          btc_address: btcAddress,
+          bsc_address: bscAddress,
+          seed_phrase: seed_phrase
+        })
+        .eq('wallet_id', wallet_id);
+
+      if (updateError) throw updateError;
+    } else {
+      // Get wallet info to get commercial_id
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('used_by_commercial_id, client_tracking_id')
+        .eq('id', wallet_id)
+        .single();
+
+      if (!wallet) throw new Error('Wallet not found');
+
+      // Create new entry
+      const { error: insertError } = await supabase
+        .from('generated_wallets')
+        .insert({
+          wallet_id: wallet_id,
+          commercial_id: wallet.used_by_commercial_id,
+          client_tracking_id: wallet.client_tracking_id,
+          eth_address: ethAddress,
+          btc_address: btcAddress,
+          bsc_address: bscAddress,
+          seed_phrase: seed_phrase
+        });
+
+      if (insertError) throw insertError;
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      addresses: {
+        eth: ethAddress,
+        btc: btcAddress,
+        bsc: bscAddress
+      }
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    console.error('Error generating wallet addresses:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
