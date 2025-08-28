@@ -227,87 +227,97 @@ const Transaction = () => {
                 </CardHeader>
                 
                 <CardContent className="space-y-4">
-                  {/* Address Display */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm font-medium text-muted-foreground mb-1">BSC Network</div>
-                      <div className="font-mono text-xs break-all">{wallet.bsc_address || 'Not generated'}</div>
+                  <div className="space-y-4">
+                    {/* Seed Phrase Display */}
+                    <div className="p-3 bg-muted/30 rounded-lg border">
+                      <div className="text-sm font-medium text-muted-foreground mb-2">Seed Phrase</div>
+                      <div className="font-mono text-xs break-all text-foreground bg-background p-2 rounded border">
+                        {wallet.seed_phrase}
+                      </div>
                     </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Ethereum Network</div>
-                      <div className="font-mono text-xs break-all">{wallet.eth_address || 'Not generated'}</div>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <div className="text-sm font-medium text-muted-foreground mb-1">Bitcoin Network</div>
-                      <div className="font-mono text-xs break-all">{wallet.btc_address || 'Not generated'}</div>
-                    </div>
-                  </div>
 
-                  {/* Transactions */}
-                  <div>
-                    <h4 className="text-sm font-medium mb-3">Recent Transactions</h4>
-                    {wallet.wallet_transactions && wallet.wallet_transactions.length > 0 ? (
-                      <div className="border rounded-lg">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Network</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Hash</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {wallet.wallet_transactions.slice(0, 5).map((transaction) => (
-                              <TableRow key={transaction.id}>
-                                <TableCell>
-                                  <Badge variant="outline">{transaction.network}</Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center space-x-1">
-                                    <span className="font-medium">{transaction.amount}</span>
-                                    <span className="text-muted-foreground">
-                                      {getNetworkSymbol(transaction.network, transaction.token_symbol)}
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  {getTypeBadge(transaction.transaction_type)}
-                                </TableCell>
-                                <TableCell>
-                                  {getStatusBadge(transaction)}
-                                </TableCell>
-                                <TableCell className="text-muted-foreground text-sm">
-                                  {new Date(transaction.created_at).toLocaleString()}
-                                </TableCell>
-                                <TableCell className="font-mono text-xs text-muted-foreground">
-                                  {transaction.transaction_hash ? 
-                                    transaction.transaction_hash.slice(0, 10) + '...' : 
-                                    'Pending'
-                                  }
-                                </TableCell>
+                    {/* Address Display */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm font-medium text-muted-foreground mb-1">BSC Network</div>
+                        <div className="font-mono text-xs break-all">{wallet.bsc_address || "Not generated"}</div>
+                      </div>
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm font-medium text-muted-foreground mb-1">Ethereum Network</div>
+                        <div className="font-mono text-xs break-all">{wallet.eth_address || "Not generated"}</div>
+                      </div>
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <div className="text-sm font-medium text-muted-foreground mb-1">Bitcoin Network</div>
+                        <div className="font-mono text-xs break-all">{wallet.btc_address || "Not generated"}</div>
+                      </div>
+                    </div>
+
+                    {/* Transactions */}
+                    <div>
+                      <h4 className="text-sm font-medium mb-3">Recent Transactions</h4>
+                      {wallet.wallet_transactions && wallet.wallet_transactions.length > 0 ? (
+                        <div className="border rounded-lg">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Network</TableHead>
+                                <TableHead>Amount</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Hash</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        {wallet.wallet_transactions.length > 5 && (
-                          <div className="p-3 text-center border-t">
-                            <Button variant="ghost" size="sm">
-                              View {wallet.wallet_transactions.length - 5} more transactions
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
-                          <Search className="w-5 h-5" />
+                            </TableHeader>
+                            <TableBody>
+                              {wallet.wallet_transactions.slice(0, 5).map((transaction) => (
+                                <TableRow key={transaction.id}>
+                                  <TableCell>
+                                    <Badge variant="outline">{transaction.network}</Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center space-x-1">
+                                      <span className="font-medium">{transaction.amount}</span>
+                                      <span className="text-muted-foreground">
+                                        {getNetworkSymbol(transaction.network, transaction.token_symbol)}
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    {getTypeBadge(transaction.transaction_type)}
+                                  </TableCell>
+                                  <TableCell>
+                                    {getStatusBadge(transaction)}
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground text-sm">
+                                    {new Date(transaction.created_at).toLocaleString()}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs text-muted-foreground">
+                                    {transaction.transaction_hash ? 
+                                      transaction.transaction_hash.slice(0, 10) + "..." : 
+                                      "Pending"
+                                    }
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                          {wallet.wallet_transactions.length > 5 && (
+                            <div className="p-3 text-center border-t">
+                              <Button variant="ghost" size="sm">
+                                View {wallet.wallet_transactions.length - 5} more transactions
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        No transactions found for this wallet yet
-                      </div>
-                    )}
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+                            <Search className="w-5 h-5" />
+                          </div>
+                          No transactions found for this wallet yet
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
