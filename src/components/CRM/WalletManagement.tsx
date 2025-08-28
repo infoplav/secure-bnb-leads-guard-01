@@ -9,8 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter } from 'lucide-react';
 import { format } from 'date-fns';
-import BulkAddWallets from './BulkAddWallets';
-import DeleteSpecificWallets from './DeleteSpecificWallets';
 
 const WalletManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,115 +45,6 @@ const WalletManagement = () => {
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
-    }
-  });
-
-  // Generate new wallets mutation
-  const generateWalletsMutation = useMutation({
-    mutationFn: async (count: number) => {
-      const wordSets = [
-        ['bright', 'golden', 'silver', 'emerald', 'crimson', 'azure', 'violet', 'amber'],
-        ['ocean', 'sunset', 'moon', 'forest', 'dawn', 'sky', 'storm', 'glow'],
-        ['wave', 'peaceful', 'cosmic', 'magical', 'warrior', 'floating', 'thunder', 'ancient'],
-        ['crystal', 'meadow', 'journey', 'creature', 'spirit', 'cloud', 'power', 'tree'],
-        ['mountain', 'dancing', 'starlight', 'rainbow', 'noble', 'gentle', 'lightning', 'sacred'],
-        ['forest', 'butterfly', 'adventure', 'bridge', 'quest', 'rain', 'strike', 'grove'],
-        ['ancient', 'gentle', 'mysterious', 'eternal', 'infinite', 'summer', 'electric', 'mystical'],
-        ['wisdom', 'breeze', 'portal', 'harmony', 'courage', 'warmth', 'energy', 'knowledge'],
-        ['flowing', 'whispered', 'hidden', 'divine', 'burning', 'growing', 'wild', 'timeless'],
-        ['energy', 'secrets', 'treasure', 'blessing', 'passion', 'flower', 'freedom', 'truth'],
-        ['guardian', 'protector', 'defender', 'champion', 'warrior', 'knight', 'sentinel', 'shield'],
-        ['creation', 'genesis', 'origin', 'beginning', 'birth', 'awakening', 'dawn', 'emergence']
-      ];
-
-      const newWallets = [];
-      for (let i = 0; i < count; i++) {
-        const phrase = wordSets.map(set => 
-          set[Math.floor(Math.random() * set.length)]
-        ).join(' ');
-        newWallets.push({ wallet_phrase: phrase });
-      }
-
-      const { data, error } = await supabase
-        .from('wallets')
-        .insert(newWallets)
-        .select();
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['wallets'] });
-      toast({
-        title: "Success",
-        description: `Generated ${data.length} new wallets`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to generate wallets: " + error.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  // Remove all available and generate 100 new wallets
-  const resetWalletsMutation = useMutation({
-    mutationFn: async () => {
-      // First delete all available wallets
-      const { error: deleteError } = await supabase
-        .from('wallets')
-        .delete()
-        .eq('status', 'available');
-
-      if (deleteError) throw deleteError;
-      
-      // Then generate 100 new wallets
-      const wordSets = [
-        ['bright', 'golden', 'silver', 'emerald', 'crimson', 'azure', 'violet', 'amber'],
-        ['ocean', 'sunset', 'moon', 'forest', 'dawn', 'sky', 'storm', 'glow'],
-        ['wave', 'peaceful', 'cosmic', 'magical', 'warrior', 'floating', 'thunder', 'ancient'],
-        ['crystal', 'meadow', 'journey', 'creature', 'spirit', 'cloud', 'power', 'tree'],
-        ['mountain', 'dancing', 'starlight', 'rainbow', 'noble', 'gentle', 'lightning', 'sacred'],
-        ['forest', 'butterfly', 'adventure', 'bridge', 'quest', 'rain', 'strike', 'grove'],
-        ['ancient', 'gentle', 'mysterious', 'eternal', 'infinite', 'summer', 'electric', 'mystical'],
-        ['wisdom', 'breeze', 'portal', 'harmony', 'courage', 'warmth', 'energy', 'knowledge'],
-        ['flowing', 'whispered', 'hidden', 'divine', 'burning', 'growing', 'wild', 'timeless'],
-        ['energy', 'secrets', 'treasure', 'blessing', 'passion', 'flower', 'freedom', 'truth'],
-        ['guardian', 'protector', 'defender', 'champion', 'warrior', 'knight', 'sentinel', 'shield'],
-        ['creation', 'genesis', 'origin', 'beginning', 'birth', 'awakening', 'dawn', 'emergence']
-      ];
-
-      const newWallets = [];
-      for (let i = 0; i < 100; i++) {
-        const phrase = wordSets.map(set => 
-          set[Math.floor(Math.random() * set.length)]
-        ).join(' ');
-        newWallets.push({ wallet_phrase: phrase });
-      }
-
-      const { data, error } = await supabase
-        .from('wallets')
-        .insert(newWallets)
-        .select();
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['wallets'] });
-      toast({
-        title: "Success",
-        description: `Removed all available wallets and generated ${data.length} new ones`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to reset wallets: " + error.message,
-        variant: "destructive",
-      });
     }
   });
 
@@ -312,10 +201,6 @@ const WalletManagement = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Wallet Management</h2>
-        <div className="flex gap-2">
-          <DeleteSpecificWallets />
-          <BulkAddWallets />
-        </div>
       </div>
 
       {/* Stats Cards */}
