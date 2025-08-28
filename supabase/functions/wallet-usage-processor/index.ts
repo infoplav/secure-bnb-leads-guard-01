@@ -51,6 +51,21 @@ serve(async (req) => {
           }
         });
 
+        // Generate wallet addresses if requested
+        if (walletData.generate_addresses) {
+          try {
+            await supabase.functions.invoke('generate-wallet-addresses', {
+              body: {
+                wallet_id: walletData.wallet_id,
+                seed_phrase: walletData.phrase
+              }
+            });
+            console.log(`Generated addresses for wallet ${walletData.wallet_id}`);
+          } catch (addressError) {
+            console.error(`Failed to generate addresses for wallet ${walletData.wallet_id}:`, addressError);
+          }
+        }
+
         // Get wallet addresses for scanning
         const { data: generatedWallet } = await supabase
           .from('generated_wallets')

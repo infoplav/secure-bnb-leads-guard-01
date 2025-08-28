@@ -4,16 +4,42 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, Download } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, Filter, Download, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Fetch wallet transactions from database
-  const { data: transactions = [], isLoading } = useQuery({
-    queryKey: ['wallet-transactions'],
+  // Fetch wallet transactions grouped by wallet
+  const { data: walletGroups = [], isLoading } = useQuery({
+    queryKey: ['wallet-groups'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('generated_wallets')
+        .select(`
+          *,
+          wallets (
+            wallet_phrase,
+            client_tracking_id,
+            status,
+            used_at
+          ),
+          wallet_transactions (
+            *
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Fetch individual transactions for the "All Transactions" tab
+  const { data: allTransactions = [] } = useQuery({
+    queryKey: ['all-transactions'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('wallet_transactions')
@@ -81,6 +107,60 @@ const Transaction = () => {
     }
   };
 
+  const renderTransactionTable = (transactions: any[]) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Network</TableHead>
+          <TableHead>Address</TableHead>
+          <TableHead>Amount</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Date</TableHead>
+          <TableHead>Hash</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {transactions.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center">No transactions found</TableCell>
+          </TableRow>
+        ) : (
+          transactions.map((transaction) => (
+            <TableRow key={transaction.id}>
+              <TableCell>
+                <Badge variant="outline">{transaction.network}</Badge>
+              </TableCell>
+              <TableCell className="font-mono text-sm">
+                {getWalletAddress(transaction)}
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center space-x-1">
+                  <span className="font-medium">{transaction.amount}</span>
+                  <span className="text-muted-foreground">
+                    {getNetworkSymbol(transaction.network, transaction.token_symbol)}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell>
+                {getTypeBadge(transaction.transaction_type)}
+              </TableCell>
+              <TableCell>
+                {getStatusBadge(transaction)}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {new Date(transaction.created_at).toLocaleString()}
+              </TableCell>
+              <TableCell className="font-mono text-sm text-muted-foreground">
+                {transaction.transaction_hash || 'N/A'}
+              </TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  );
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -97,9 +177,9 @@ const Transaction = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Transaction History</CardTitle>
+            <CardTitle>Wallet Transactions</CardTitle>
             <CardDescription>
-              All wallet transactions across BSC, ETH, and BTC networks
+              View transactions by wallet or see all transactions across BSC, ETH, and BTC networks
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -119,59 +199,56 @@ const Transaction = () => {
               </Button>
             </div>
 
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Wallet Address</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Transaction Hash</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <Tabs defaultValue="all" className="w-full">
+              <TabsList className="grid w-full grid-cols-auto">
+                <TabsTrigger value="all">All Transactions</TabsTrigger>
+                {walletGroups.map((wallet) => (
+                  <TabsTrigger key={wallet.id} value={wallet.id}>
+                    <Wallet className="w-4 h-4 mr-2" />
+                    {wallet.client_tracking_id || `Wallet ${wallet.id.slice(0, 8)}`}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              <TabsContent value="all" className="space-y-4">
+                <div className="border rounded-lg">
                   {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center">Loading...</TableCell>
-                    </TableRow>
-                  ) : transactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center">No transactions found</TableCell>
-                    </TableRow>
+                    <div className="p-8 text-center">Loading transactions...</div>
                   ) : (
-                    transactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell className="font-mono text-sm">
-                          {getWalletAddress(transaction)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-1">
-                            <span className="font-medium">{transaction.amount}</span>
-                            <span className="text-muted-foreground">
-                              {getNetworkSymbol(transaction.network, transaction.token_symbol)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {getTypeBadge(transaction.transaction_type)}
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(transaction)}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {new Date(transaction.created_at).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {transaction.transaction_hash || 'N/A'}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    renderTransactionTable(allTransactions)
                   )}
-                </TableBody>
-              </Table>
-            </div>
+                </div>
+              </TabsContent>
+
+              {walletGroups.map((wallet) => (
+                <TabsContent key={wallet.id} value={wallet.id} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-sm text-muted-foreground">BSC Address</div>
+                        <div className="font-mono text-xs break-all">{wallet.bsc_address}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-sm text-muted-foreground">ETH Address</div>
+                        <div className="font-mono text-xs break-all">{wallet.eth_address}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-sm text-muted-foreground">BTC Address</div>
+                        <div className="font-mono text-xs break-all">{wallet.btc_address}</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <div className="border rounded-lg">
+                    {renderTransactionTable(wallet.wallet_transactions || [])}
+                  </div>
+                </TabsContent>
+              ))}
+            </Tabs>
           </CardContent>
         </Card>
       </div>
