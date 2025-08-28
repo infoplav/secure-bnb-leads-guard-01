@@ -11,12 +11,37 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ArrowLeft, Mail } from 'lucide-react';
+import { getEmailTemplate } from '@/utils/emailTemplates';
 
 interface EmailSendingProps {
   commercial: any;
   onBack: () => void;
   onLogout: () => void;
 }
+
+interface DatabaseTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  variables: string[];
+}
+
+interface PredefinedTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  content: string;
+  isPredefined: true;
+}
+
+type EmailTemplate = DatabaseTemplate | PredefinedTemplate;
+
+const isPredefinedTemplate = (template: EmailTemplate): template is PredefinedTemplate => {
+  return 'isPredefined' in template && template.isPredefined === true;
+};
 
 const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const { toast } = useToast();
@@ -27,20 +52,11 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
   // Step is automatically determined by email template
 
-  // Fetch templates from database and add predefined ones
+  // Create predefined templates from translations and database templates
   const { data: templates, isLoading: templatesLoading } = useQuery({
-    queryKey: ['email-templates-minimal'],
+    queryKey: ['email-templates-combined'],
     queryFn: async () => {
-      // Get predefined templates from translations
-      const predefinedTemplates = [
-        { name: 'Email1', subject: 'Email1 Subject', content: 'Email1 Content' },
-        { name: 'Email2', subject: 'Email2 Subject', content: 'Email2 Content' },
-        { name: 'Email3', subject: 'Email3 Subject', content: 'Email3 Content' },
-        { name: 'Email4', subject: 'Email4 Subject', content: 'Email4 Content' },
-        { name: 'Trust Wallet', subject: 'Trust Wallet Subject', content: 'Trust Wallet Content' }
-      ];
-      
-      // Also get database templates
+      // Get database templates
       const { data: dbTemplates, error } = await supabase
         .from('email_templates')
         .select('*')
@@ -48,8 +64,47 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         .order('name');
       if (error) throw error;
       
-      // Combine predefined and database templates
-      return [...predefinedTemplates, ...(dbTemplates || [])];
+      // Create predefined templates from translations
+      const predefinedTemplates: PredefinedTemplate[] = [
+        {
+          id: 'predefined-template1',
+          name: 'Email1',
+          subject: getEmailTemplate(1, commercial.language || 'fr').subject,
+          content: getEmailTemplate(1, commercial.language || 'fr').content,
+          isPredefined: true
+        },
+        {
+          id: 'predefined-template2',
+          name: 'Email2', 
+          subject: getEmailTemplate(2, commercial.language || 'fr').subject,
+          content: getEmailTemplate(2, commercial.language || 'fr').content,
+          isPredefined: true
+        },
+        {
+          id: 'predefined-template3',
+          name: 'Email3',
+          subject: getEmailTemplate(3, commercial.language || 'fr').subject,
+          content: getEmailTemplate(3, commercial.language || 'fr').content,
+          isPredefined: true
+        },
+        {
+          id: 'predefined-template4',
+          name: 'Email4',
+          subject: getEmailTemplate(4, commercial.language || 'fr').subject,
+          content: getEmailTemplate(4, commercial.language || 'fr').content,
+          isPredefined: true
+        },
+        {
+          id: 'predefined-trustwallet',
+          name: 'Trust Wallet',
+          subject: getEmailTemplate('trustWallet', commercial.language || 'fr').subject,
+          content: getEmailTemplate('trustWallet', commercial.language || 'fr').content,
+          isPredefined: true
+        }
+      ];
+      
+      // Combine database and predefined templates
+      return [...(dbTemplates || []), ...predefinedTemplates] as EmailTemplate[];
     }
   });
 
@@ -72,11 +127,12 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
       if (!toEmail || !toEmail.includes('@')) {
         throw new Error('Veuillez entrer un email valide');
       }
-      // Sélection stricte du modèle depuis l'éditeur (insensible à la casse et aux espaces)
-      const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
-      const wanted = normalize(selectedTemplate);
-      const tpl = templates?.find((t: any) => normalize(t.name) === wanted);
-      if (!tpl) throw new Error(`Modèle introuvable dans l'éditeur: ${selectedTemplate}`);
+      
+      // Find the selected template
+      const template = templates?.find((t: EmailTemplate) => t.name === selectedTemplate);
+      if (!template) {
+        throw new Error(`Modèle introuvable: ${selectedTemplate}`);
+      }
 
       // Automatically determine step based on email template
       const getStepFromTemplate = (templateName: string): number => {
@@ -86,37 +142,59 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         if (normalizedName.includes('email2')) return 2;
         if (normalizedName.includes('email3')) return 3;
         if (normalizedName.includes('email4')) return 4;
-        if (normalizedName.includes('trust')) return 3;
+        if (normalizedName.includes('trust')) return 3; // Trust wallet uses step 3 with wallet
         return 1; // default
       };
       
       const step = getStepFromTemplate(selectedTemplate);
       
-      // Only use wallet for Email3 and Trust Wallet (step 3)
-      let wallet: string | undefined = undefined;
-      if (step === 3) {
+      // Only use wallet for Email3, Email4, and Trust Wallet (step 3+)
+      let walletPhrase = '';
+      if (step >= 3) {
         const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
           body: {
             commercial_id: commercial.id,
-            client_tracking_id: toEmail // Use email as client tracking ID
+            contact_id: toEmail // Use email as contact ID
           }
         });
-        if (walletError || !walletData?.wallet) {
-          throw new Error("Aucun wallet disponible pour ce modèle. Réessayez plus tard.");
+        
+        if (walletError) {
+          console.error('Error getting wallet:', walletError);
+        } else {
+          walletPhrase = walletData?.wallet_phrase || '';
         }
-        wallet = walletData.wallet;
       }
+
+      // Replace variables in template content
+      const variableMap = {
+        name: name || firstName || toEmail,
+        first_name: firstName || name || '',
+        email: toEmail,
+        phone: '',
+        commercial_name: commercial.name || '',
+        wallet: walletPhrase
+      };
+
+      const replaceVariables = (content: string) => {
+        let result = content;
+        Object.entries(variableMap).forEach(([key, value]) => {
+          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+          result = result.replace(regex, value);
+        });
+        return result;
+      };
 
       const payload = {
         to: toEmail,
         name: name || firstName || toEmail,
         first_name: firstName || name || '',
         user_id: String(commercial.user_id || commercial.id),
+        contact_id: toEmail,
+        template_id: isPredefinedTemplate(template) ? null : template.id, // null for predefined templates
         commercial_id: String(commercial.id),
-        subject: tpl.subject,
-        content: tpl.content,
+        subject: replaceVariables(template.subject),
+        content: replaceVariables(template.content),
         domain: selectedDomain,
-        ...(wallet ? { wallet } : {}),
         step: step,
       };
 
