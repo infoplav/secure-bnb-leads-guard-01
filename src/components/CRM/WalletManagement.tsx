@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import BulkAddWallets from './BulkAddWallets';
+import DeleteSpecificWallets from './DeleteSpecificWallets';
 
 const WalletManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -311,7 +312,10 @@ const WalletManagement = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Wallet Management</h2>
-        <BulkAddWallets />
+        <div className="flex gap-2">
+          <DeleteSpecificWallets />
+          <BulkAddWallets />
+        </div>
       </div>
 
       {/* Stats Cards */}
