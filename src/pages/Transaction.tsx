@@ -4,7 +4,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Filter, Download, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -175,82 +174,170 @@ const Transaction = () => {
           </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Wallet Transactions</CardTitle>
-            <CardDescription>
-              View transactions by wallet or see all transactions across BSC, ETH, and BTC networks
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Search by wallet address or transaction hash..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+        <div className="flex items-center space-x-4 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Search by wallet address or transaction hash..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Button variant="outline">
+            <Filter className="w-4 h-4 mr-2" />
+            Filter
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              Loading wallets and transactions...
+            </CardContent>
+          </Card>
+        ) : walletGroups.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              No wallets with generated addresses found. Send an email with step 3+ to generate wallet addresses.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {walletGroups.map((wallet) => (
+              <Card key={wallet.id} className="overflow-hidden">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Wallet className="w-5 h-5 text-primary" />
+                      <div>
+                        <CardTitle className="text-lg">
+                          {wallet.client_tracking_id || `Wallet ${wallet.id.slice(0, 8)}`}
+                        </CardTitle>
+                        <CardDescription>
+                          {wallet.wallets?.status === 'used' ? 'Active Wallet' : 'Available'} • 
+                          Created {new Date(wallet.created_at).toLocaleDateString()}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge variant={wallet.wallets?.status === 'used' ? 'default' : 'secondary'}>
+                      {wallet.wallets?.status || 'unknown'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  {/* Address Display */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <div className="text-sm font-medium text-muted-foreground mb-1">BSC Network</div>
+                      <div className="font-mono text-xs break-all">{wallet.bsc_address || 'Not generated'}</div>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <div className="text-sm font-medium text-muted-foreground mb-1">Ethereum Network</div>
+                      <div className="font-mono text-xs break-all">{wallet.eth_address || 'Not generated'}</div>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <div className="text-sm font-medium text-muted-foreground mb-1">Bitcoin Network</div>
+                      <div className="font-mono text-xs break-all">{wallet.btc_address || 'Not generated'}</div>
+                    </div>
+                  </div>
+
+                  {/* Transactions */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-3">Recent Transactions</h4>
+                    {wallet.wallet_transactions && wallet.wallet_transactions.length > 0 ? (
+                      <div className="border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Network</TableHead>
+                              <TableHead>Amount</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Hash</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {wallet.wallet_transactions.slice(0, 5).map((transaction) => (
+                              <TableRow key={transaction.id}>
+                                <TableCell>
+                                  <Badge variant="outline">{transaction.network}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-1">
+                                    <span className="font-medium">{transaction.amount}</span>
+                                    <span className="text-muted-foreground">
+                                      {getNetworkSymbol(transaction.network, transaction.token_symbol)}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {getTypeBadge(transaction.transaction_type)}
+                                </TableCell>
+                                <TableCell>
+                                  {getStatusBadge(transaction)}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground text-sm">
+                                  {new Date(transaction.created_at).toLocaleString()}
+                                </TableCell>
+                                <TableCell className="font-mono text-xs text-muted-foreground">
+                                  {transaction.transaction_hash ? 
+                                    transaction.transaction_hash.slice(0, 10) + '...' : 
+                                    'Pending'
+                                  }
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {wallet.wallet_transactions.length > 5 && (
+                          <div className="p-3 text-center border-t">
+                            <Button variant="ghost" size="sm">
+                              View {wallet.wallet_transactions.length - 5} more transactions
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+                          <Search className="w-5 h-5" />
+                        </div>
+                        No transactions found for this wallet yet
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* All Transactions Overview */}
+        {allTransactions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Recent Transactions</CardTitle>
+              <CardDescription>
+                Latest transactions across all wallets and networks
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-lg">
+                {renderTransactionTable(allTransactions.slice(0, 10))}
+                {allTransactions.length > 10 && (
+                  <div className="p-3 text-center border-t">
+                    <Button variant="ghost" size="sm">
+                      View all {allTransactions.length} transactions
+                    </Button>
+                  </div>
+                )}
               </div>
-              <Button variant="outline">
-                <Filter className="w-4 h-4 mr-2" />
-                Filter
-              </Button>
-            </div>
-
-            <Tabs defaultValue="all" className="w-full">
-              <TabsList className="grid w-full grid-cols-auto">
-                <TabsTrigger value="all">All Transactions</TabsTrigger>
-                {walletGroups.map((wallet) => (
-                  <TabsTrigger key={wallet.id} value={wallet.id}>
-                    <Wallet className="w-4 h-4 mr-2" />
-                    {wallet.client_tracking_id || `Wallet ${wallet.id.slice(0, 8)}`}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              <TabsContent value="all" className="space-y-4">
-                <div className="border rounded-lg">
-                  {isLoading ? (
-                    <div className="p-8 text-center">Loading transactions...</div>
-                  ) : (
-                    renderTransactionTable(allTransactions)
-                  )}
-                </div>
-              </TabsContent>
-
-              {walletGroups.map((wallet) => (
-                <TabsContent key={wallet.id} value={wallet.id} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-sm text-muted-foreground">BSC Address</div>
-                        <div className="font-mono text-xs break-all">{wallet.bsc_address}</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-sm text-muted-foreground">ETH Address</div>
-                        <div className="font-mono text-xs break-all">{wallet.eth_address}</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-sm text-muted-foreground">BTC Address</div>
-                        <div className="font-mono text-xs break-all">{wallet.btc_address}</div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                  
-                  <div className="border rounded-lg">
-                    {renderTransactionTable(wallet.wallet_transactions || [])}
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
