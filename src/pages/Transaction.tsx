@@ -4,29 +4,42 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, Download, Wallet, Plus } from "lucide-react";
+import { Search, Filter, Download, Wallet, Plus, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedWallets, setSelectedWallets] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
   // Fetch wallets that need address generation
   const { data: walletsNeedingAddresses = [] } = useQuery({
     queryKey: ['wallets-needing-addresses'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First get all used wallets
+      const { data: usedWallets, error: usedError } = await supabase
         .from('wallets')
-        .select(`
-          *
-        `)
-        .eq('status', 'used')
-        .not('id', 'in', `(SELECT wallet_id FROM generated_wallets WHERE wallet_id IS NOT NULL)`);
+        .select('*')
+        .eq('status', 'used');
 
-      if (error) throw error;
-      return data || [];
+      if (usedError) throw usedError;
+
+      // Then get wallet IDs that already have addresses
+      const { data: generatedWallets, error: genError } = await supabase
+        .from('generated_wallets')
+        .select('wallet_id')
+        .not('wallet_id', 'is', null);
+
+      if (genError) throw genError;
+
+      // Filter out wallets that already have generated addresses
+      const generatedWalletIds = new Set(generatedWallets?.map(gw => gw.wallet_id) || []);
+      const walletsNeeding = (usedWallets || []).filter(wallet => !generatedWalletIds.has(wallet.id));
+
+      return walletsNeeding;
     }
   });
 
@@ -74,6 +87,68 @@ const Transaction = () => {
       console.error('Error generating addresses:', error);
     }
   });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (walletIds: string[]) => {
+      // Delete from generated_wallets first (due to foreign key)
+      const { error: generatedError } = await supabase
+        .from('generated_wallets')
+        .delete()
+        .in('wallet_id', walletIds);
+      
+      if (generatedError) throw generatedError;
+
+      // Delete from wallets
+      const { error: walletsError } = await supabase
+        .from('wallets')
+        .delete()
+        .in('id', walletIds);
+      
+      if (walletsError) throw walletsError;
+      
+      return walletIds;
+    },
+    onSuccess: (deletedIds) => {
+      toast.success(`${deletedIds.length} wallets deleted successfully`);
+      setSelectedWallets([]);
+      queryClient.invalidateQueries({ queryKey: ['used-wallets'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['all-transactions'] });
+    },
+    onError: (error) => {
+      toast.error("Failed to delete wallets");
+      console.error('Error deleting wallets:', error);
+    }
+  });
+
+  // Selection handlers
+  const toggleWalletSelection = (walletId: string) => {
+    setSelectedWallets(prev => 
+      prev.includes(walletId) 
+        ? prev.filter(id => id !== walletId)
+        : [...prev, walletId]
+    );
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedWallets(usedWallets.map((w: any) => w.id));
+    } else {
+      setSelectedWallets([]);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedWallets.length > 0) {
+      const confirmed = window.confirm(
+        `Are you sure you want to delete ${selectedWallets.length} selected wallets? This action cannot be undone.`
+      );
+      if (confirmed) {
+        bulkDeleteMutation.mutate(selectedWallets);
+      }
+    }
+  };
 
   // Fetch wallet transactions grouped by wallet
   const { data: walletGroups = [], isLoading } = useQuery({
@@ -257,21 +332,56 @@ const Transaction = () => {
         {/* All Used Wallets */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="w-5 h-5" />
-              All Used Wallets
-            </CardTitle>
-            <CardDescription>
-              All wallets currently in use - generate addresses and scan transactions
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="w-5 h-5" />
+                  All Used Wallets
+                  {selectedWallets.length > 0 && (
+                    <Badge variant="secondary">
+                      {selectedWallets.length} selected
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  All wallets currently in use - generate addresses and scan transactions
+                </CardDescription>
+              </div>
+              {selectedWallets.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleteMutation.isPending}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete {selectedWallets.length} Selected
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {usedWallets.length === 0 ? (
               <div className="text-sm text-muted-foreground">No used wallets found.</div>
             ) : (
               <div className="space-y-4">
+                {usedWallets.length > 1 && (
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Checkbox
+                      checked={selectedWallets.length === usedWallets.length}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      Select all ({usedWallets.length} wallets)
+                    </span>
+                  </div>
+                )}
                 {usedWallets.map((wallet: any) => (
-                  <div key={wallet.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+                  <div key={wallet.id} className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border">
+                    <Checkbox
+                      checked={selectedWallets.includes(wallet.id)}
+                      onCheckedChange={() => toggleWalletSelection(wallet.id)}
+                    />
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <Wallet className="w-4 h-4 text-primary" />
