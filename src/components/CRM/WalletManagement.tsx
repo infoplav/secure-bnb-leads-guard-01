@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter } from 'lucide-react';
 import { format } from 'date-fns';
@@ -16,6 +17,7 @@ const WalletManagement = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [idTypeFilter, setIdTypeFilter] = useState<'all' | 'email' | 'complex'>('all');
+  const [selectedWallets, setSelectedWallets] = useState<string[]>([]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -134,6 +136,80 @@ const WalletManagement = () => {
       });
     }
   });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (walletIds: string[]) => {
+      // Delete from generated_wallets first (due to foreign key)
+      const { error: generatedError } = await supabase
+        .from('generated_wallets')
+        .delete()
+        .in('wallet_id', walletIds);
+      
+      if (generatedError) {
+        console.log('Generated wallets deletion error (might be expected):', generatedError);
+      }
+
+      // Delete from wallets
+      const { error: walletsError } = await supabase
+        .from('wallets')
+        .delete()
+        .in('id', walletIds);
+      
+      if (walletsError) throw walletsError;
+      
+      return walletIds;
+    },
+    onSuccess: (deletedIds) => {
+      toast({
+        title: "Success",
+        description: `${deletedIds.length} wallets deleted successfully`,
+      });
+      setSelectedWallets([]);
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+      queryClient.invalidateQueries({ queryKey: ['all-wallets'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to delete wallets: " + error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Selection handlers
+  const toggleWalletSelection = (walletId: string) => {
+    setSelectedWallets(prev => 
+      prev.includes(walletId) 
+        ? prev.filter(id => id !== walletId)
+        : [...prev, walletId]
+    );
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedWallets(filteredWallets?.map(w => w.id) || []);
+    } else {
+      setSelectedWallets([]);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedWallets.length > 0) {
+      const confirmed = window.confirm(
+        `Are you sure you want to delete ${selectedWallets.length} selected wallets? This action cannot be undone.`
+      );
+      if (confirmed) {
+        bulkDeleteMutation.mutate(selectedWallets);
+      }
+    }
+  };
+
+  // Clear selection when tab changes
+  React.useEffect(() => {
+    setSelectedWallets([]);
+  }, [currentTab]);
 
   // Helper function to check if ID is email format
   const isEmailFormat = (id: string) => {
@@ -324,6 +400,35 @@ const WalletManagement = () => {
         </div>
       )}
 
+      {/* Bulk Actions for Used Wallets */}
+      {currentTab === 'used' && filteredWallets && filteredWallets.length > 0 && (
+        <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+          <div className="flex items-center gap-4">
+            <Checkbox
+              checked={selectedWallets.length === filteredWallets.length}
+              onCheckedChange={toggleSelectAll}
+            />
+            <span className="text-sm text-muted-foreground">
+              {selectedWallets.length > 0 
+                ? `${selectedWallets.length} of ${filteredWallets.length} wallets selected`
+                : `Select all ${filteredWallets.length} wallets`
+              }
+            </span>
+          </div>
+          {selectedWallets.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete {selectedWallets.length} Selected
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Wallets List */}
       <div className="space-y-4">
         {isLoading ? (
@@ -335,7 +440,15 @@ const WalletManagement = () => {
         ) : (
           filteredWallets?.map((wallet) => (
             <Card key={wallet.id} className="p-4">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4">
+                {/* Checkbox for used wallets */}
+                {currentTab === 'used' && (
+                  <Checkbox
+                    checked={selectedWallets.includes(wallet.id)}
+                    onCheckedChange={() => toggleWalletSelection(wallet.id)}
+                    className="mt-1"
+                  />
+                )}
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-2">
                     <Badge variant={
