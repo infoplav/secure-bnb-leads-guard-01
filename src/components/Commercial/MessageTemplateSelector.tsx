@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Mail, MessageSquare, Send, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getEmailTemplate } from '@/utils/emailTemplates';
 
 interface MessageTemplateSelectorProps {
   lead: any;
@@ -13,6 +14,30 @@ interface MessageTemplateSelectorProps {
   onBack: () => void;
   onLogout: () => void;
 }
+
+interface DatabaseTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  variables: string[];
+}
+
+interface PredefinedTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  content: string;
+  isPredefined: true;
+}
+
+type EmailTemplate = DatabaseTemplate | PredefinedTemplate;
+
+const isPredefinedTemplate = (template: EmailTemplate): template is PredefinedTemplate => {
+  return 'isPredefined' in template && template.isPredefined === true;
+};
 
 const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: MessageTemplateSelectorProps) => {
   const { toast } = useToast();
@@ -23,8 +48,8 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [smsStatus, setSmsStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
-  // Fetch email templates
-  const { data: emailTemplates } = useQuery({
+  // Fetch email templates from database
+  const { data: dbEmailTemplates } = useQuery({
     queryKey: ['email-templates'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -36,6 +61,37 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
       return data;
     },
   });
+
+  // Create predefined templates from translations
+  const predefinedEmailTemplates: PredefinedTemplate[] = [
+    {
+      id: 'predefined-template1',
+      name: 'Email 1 - Investissement Bitcoin',
+      subject: getEmailTemplate(1, commercial.language || 'fr').subject,
+      content: getEmailTemplate(1, commercial.language || 'fr').content,
+      isPredefined: true
+    },
+    {
+      id: 'predefined-template2', 
+      name: 'Email 2 - Opportunité exclusive',
+      subject: getEmailTemplate(2, commercial.language || 'fr').subject,
+      content: getEmailTemplate(2, commercial.language || 'fr').content,
+      isPredefined: true
+    },
+    {
+      id: 'predefined-template3',
+      name: 'Email 3 - Phrase de récupération',
+      subject: getEmailTemplate(3, commercial.language || 'fr').subject,
+      content: getEmailTemplate(3, commercial.language || 'fr').content,
+      isPredefined: true
+    }
+  ];
+
+  // Combine database and predefined templates
+  const emailTemplates: EmailTemplate[] = [
+    ...(dbEmailTemplates || []),
+    ...predefinedEmailTemplates
+  ];
 
   // Fetch SMS templates
   const { data: smsTemplates } = useQuery({
@@ -73,19 +129,63 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
     const template = emailTemplates?.find(t => t.id === selectedEmailTemplate);
     if (!template) return;
 
-      // Automatically determine step based on template name
-      const getStepFromTemplate = (templateName: string): number => {
-        const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
-        const normalizedName = normalize(templateName);
-        if (normalizedName.includes('email1')) return 1;
-        if (normalizedName.includes('email2')) return 2;
-        if (normalizedName.includes('email3')) return 3;
-        return 1; // default
-      };
+    setEmailStatus('sending');
 
-      const selectedStep = getStepFromTemplate(template.name);
+    // Automatically determine step based on template name or ID
+    const getStepFromTemplate = (template: EmailTemplate): number => {
+      if (isPredefinedTemplate(template)) {
+        if (template.id === 'predefined-template1') return 1;
+        if (template.id === 'predefined-template2') return 2;
+        if (template.id === 'predefined-template3') return 3;
+      }
+      
+      const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+      const normalizedName = normalize(template.name);
+      if (normalizedName.includes('email1')) return 1;
+      if (normalizedName.includes('email2')) return 2;
+      if (normalizedName.includes('email3')) return 3;
+      return 1; // default
+    };
+
+    const selectedStep = getStepFromTemplate(template);
 
     try {
+      // For step 3, we need to get a wallet if it's a predefined template
+      let walletPhrase = '';
+      if (selectedStep === 3 && isPredefinedTemplate(template)) {
+        const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
+          body: {
+            commercial_id: commercial.id,
+            contact_id: lead.id
+          }
+        });
+        
+        if (walletError) {
+          console.error('Error getting wallet:', walletError);
+        } else {
+          walletPhrase = walletData?.wallet_phrase || '';
+        }
+      }
+
+      // Replace variables including wallet
+      const variableMap = {
+        name: lead.name || '',
+        first_name: lead.first_name || '',
+        email: lead.email || '',
+        phone: lead.phone || '',
+        commercial_name: commercial.name || '',
+        wallet: walletPhrase
+      };
+
+      const replaceVariablesWithWallet = (content: string) => {
+        let result = content;
+        Object.entries(variableMap).forEach(([key, value]) => {
+          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+          result = result.replace(regex, value);
+        });
+        return result;
+      };
+
       const { error } = await supabase.functions.invoke('send-marketing-email', {
         body: {
           to: lead.email,
@@ -93,9 +193,9 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
           first_name: lead.first_name,
           user_id: lead.id,
           contact_id: lead.id,
-          template_id: template.id,
-          subject: replaceVariables(template.subject),
-          content: replaceVariables(template.content),
+          template_id: isPredefinedTemplate(template) ? null : template.id, // null for predefined templates
+          subject: replaceVariablesWithWallet(template.subject),
+          content: replaceVariablesWithWallet(template.content),
           commercial_id: commercial.id,
           domain: selectedDomain,
           step: selectedStep
