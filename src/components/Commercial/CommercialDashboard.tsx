@@ -599,7 +599,7 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
                 <span className="truncate">Email Sending</span>
               </CardTitle>
               <CardDescription className="text-gray-400 text-xs sm:text-sm">
-                Envoyer un email rapide (Email1/Email2)
+                Envoyer un email rapide (Email1/2/3/4/Trust Wallet)
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">

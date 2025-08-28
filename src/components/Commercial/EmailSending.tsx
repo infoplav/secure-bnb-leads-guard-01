@@ -27,17 +27,29 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
   // Step is automatically determined by email template
 
-  // Fetch only the two templates needed
+  // Fetch templates from database and add predefined ones
   const { data: templates, isLoading: templatesLoading } = useQuery({
     queryKey: ['email-templates-minimal'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Get predefined templates from translations
+      const predefinedTemplates = [
+        { name: 'Email1', subject: 'Email1 Subject', content: 'Email1 Content' },
+        { name: 'Email2', subject: 'Email2 Subject', content: 'Email2 Content' },
+        { name: 'Email3', subject: 'Email3 Subject', content: 'Email3 Content' },
+        { name: 'Email4', subject: 'Email4 Subject', content: 'Email4 Content' },
+        { name: 'Trust Wallet', subject: 'Trust Wallet Subject', content: 'Trust Wallet Content' }
+      ];
+      
+      // Also get database templates
+      const { data: dbTemplates, error } = await supabase
         .from('email_templates')
         .select('*')
         .ilike('name', 'email%')
         .order('name');
       if (error) throw error;
-      return data || [];
+      
+      // Combine predefined and database templates
+      return [...predefinedTemplates, ...(dbTemplates || [])];
     }
   });
 
@@ -73,12 +85,14 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         if (normalizedName.includes('email1')) return 1;
         if (normalizedName.includes('email2')) return 2;
         if (normalizedName.includes('email3')) return 3;
+        if (normalizedName.includes('email4')) return 4;
+        if (normalizedName.includes('trust')) return 3;
         return 1; // default
       };
       
       const step = getStepFromTemplate(selectedTemplate);
       
-      // Only use wallet for Email3 (step 3)
+      // Only use wallet for Email3 and Trust Wallet (step 3)
       let wallet: string | undefined = undefined;
       if (step === 3) {
         const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
@@ -189,6 +203,8 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
                     <SelectItem value="Email1">Email1 (Étape 1)</SelectItem>
                     <SelectItem value="Email2">Email2 (Étape 2)</SelectItem>
                     <SelectItem value="Email3">Email3 (Étape 3 - avec wallet)</SelectItem>
+                    <SelectItem value="Email4">Email4 (Étape 4)</SelectItem>
+                    <SelectItem value="Trust Wallet">Trust Wallet (Étape 3 - avec wallet)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
