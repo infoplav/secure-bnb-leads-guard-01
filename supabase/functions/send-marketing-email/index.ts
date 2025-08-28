@@ -318,6 +318,23 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Marketing email sent successfully:", emailResponse);
 
+    // Send Telegram notification if wallet was used in email
+    if (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject)) {
+      const skipWalletByStep = typeof step === 'number' && (step === 1 || step === 2);
+      if (!skipWalletByStep) {
+        try {
+          await supabase.functions.invoke('send-telegram-notification', {
+            body: {
+              message: `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`
+            }
+          });
+        } catch (telegramError) {
+          console.error('Error sending Telegram notification for email:', telegramError);
+          // Don't fail the email send if Telegram fails
+        }
+      }
+    }
+
     // Log to database in background (non-blocking)
     EdgeRuntime.waitUntil(
       supabase.from('email_logs').insert({
