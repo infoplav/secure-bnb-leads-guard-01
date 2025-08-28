@@ -185,18 +185,11 @@ const handler = async (req: Request): Promise<Response> => {
           }
         }
 
-        console.log('No assigned wallet found, generating random seed phrase');
-        // Fallback: generate a random 12-word seed phrase
-        const wordlist = [
-          'bright','ocean','wave','crystal','mountain','forest','ancient','wisdom','flowing','energy','silver','river',
-          'golden','sun','silent','meadow','gentle','breeze','echo','shadow','hidden','path','sky','dawn','ember','stone'
-        ];
-        const pick = () => wordlist[Math.floor(Math.random() * wordlist.length)];
-        const words = Array.from({ length: 12 }, pick);
-        return words.join(' ');
+        console.warn('No available wallet found for this commercial/user.');
+        return '';
       } catch (error) {
         console.error('Error retrieving wallet phrase:', error);
-        return 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
+        return '';
       }
     };
 
@@ -219,8 +212,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Only process wallet placeholders if they exist in the content
     console.log('Checking if email content contains wallet placeholders...');
-    if (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject)) {
-      console.log('Wallet placeholders found, processing wallet replacements...');
+    const skipWalletByStep = typeof step === 'number' && (step === 1 || step === 2);
+    if (!skipWalletByStep && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject))) {
+      console.log('Wallet placeholders found and step not 1/2, processing wallet replacements...');
       
       // Normalize braces and invisible spaces, then replace wallet placeholders
       const normalizeBraces = (s: string) => s
@@ -239,6 +233,13 @@ const handler = async (req: Request): Promise<Response> => {
 
       // Get wallet once and reuse it for all replacements
       const uniqueWallet = await getUniqueWallet();
+      if (!uniqueWallet || uniqueWallet.trim() === '') {
+        console.error('Wallet placeholder present but no available wallet could be obtained. Aborting send.');
+        return new Response(
+          JSON.stringify({ success: false, error: 'No available wallet to fill template.' }),
+          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
+      }
       console.log('Using wallet for replacements (first 10 chars):', uniqueWallet.substring(0, 10) + '...');
 
       // Replace ONLY actual {{wallet}} placeholders
