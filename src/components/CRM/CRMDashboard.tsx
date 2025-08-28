@@ -13,7 +13,6 @@ import { LeadFilters } from './LeadFilters';
 import { LeadActions } from './LeadActions';
 import { BotDetection } from './BotDetection';
 import EmailLogsViewer from './EmailLogsViewer';
-import BackfillCommercialNames from './BackfillCommercialNames';
 import WalletManagement from './WalletManagement';
 import SeedPhraseManagement from './SeedPhraseManagement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -629,12 +628,11 @@ const CRMDashboard = () => {
 
         {/* Main Content with Tabs */}
         <Tabs defaultValue="leads" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="leads">Leads Database</TabsTrigger>
             <TabsTrigger value="emails">Email Activity</TabsTrigger>
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="seeds">Seed Phrases</TabsTrigger>
-            <TabsTrigger value="backfill">Backfill Tools</TabsTrigger>
           </TabsList>
           
           <TabsContent value="leads">
@@ -803,10 +801,6 @@ const CRMDashboard = () => {
           
           <TabsContent value="seeds">
             <SeedPhraseManagement />
-          </TabsContent>
-          
-          <TabsContent value="backfill">
-            <BackfillCommercialNames />
           </TabsContent>
         </Tabs>
       </div>
