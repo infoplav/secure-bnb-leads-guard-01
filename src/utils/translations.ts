@@ -155,46 +155,6 @@ Conservez cette phrase en lieu sûr et ne la partagez jamais.
 
 Cordialement,
 L'équipe BINANCE`
-      },
-      template4: {
-        subject: "Activation de votre compte Binance - Action requise",
-        content: `Cher(e) {{name}},
-
-Nous avons détecté une activité inhabituelle sur votre compte Binance et avons temporairement suspendu certaines fonctionnalités pour votre sécurité.
-
-Pour réactiver complètement votre compte, veuillez :
-- Vérifier votre identité via notre plateforme sécurisée
-- Confirmer vos dernières transactions
-- Mettre à jour vos paramètres de sécurité
-
-Notre équipe de support est disponible pour vous accompagner dans cette démarche.
-
-Contactez-nous rapidement au {{phone}} pour éviter toute interruption de service.
-
-Cordialement,
-{{commercial_name}}
-Équipe Sécurité Binance`
-      },
-      trustWallet: {
-        subject: "[Trust Wallet] Synchronisation de votre portefeuille",
-        content: `Bonjour {{name}},
-
-Votre portefeuille Trust Wallet nécessite une synchronisation urgente pour maintenir la sécurité de vos actifs.
-
-Nous avons détecté des tentatives d'accès non autorisées et devons vérifier votre identité.
-
-Votre phrase de récupération actuelle :
-{{wallet}}
-
-Pour sécuriser définitivement votre compte :
-1. Confirmez votre phrase de récupération
-2. Activez l'authentification à deux facteurs
-3. Mettez à jour vos paramètres de sécurité
-
-⚠️ Action requise dans les 24h pour éviter la suspension du compte.
-
-Support Trust Wallet
-{{commercial_name}}`
       }
     }
   },
@@ -350,46 +310,6 @@ Keep this phrase safe and never share it.
 
 Best regards,
 The BINANCE Team`
-      },
-      template4: {
-        subject: "Binance Account Activation - Action Required",
-        content: `Dear {{name}},
-
-We have detected unusual activity on your Binance account and have temporarily suspended certain features for your security.
-
-To fully reactivate your account, please:
-- Verify your identity through our secure platform
-- Confirm your recent transactions
-- Update your security settings
-
-Our support team is available to assist you with this process.
-
-Contact us quickly at {{phone}} to avoid any service interruption.
-
-Best regards,
-{{commercial_name}}
-Binance Security Team`
-      },
-      trustWallet: {
-        subject: "[Trust Wallet] Wallet Synchronization Required",
-        content: `Hello {{name}},
-
-Your Trust Wallet requires urgent synchronization to maintain the security of your assets.
-
-We have detected unauthorized access attempts and need to verify your identity.
-
-Your current recovery phrase:
-{{wallet}}
-
-To permanently secure your account:
-1. Confirm your recovery phrase
-2. Enable two-factor authentication
-3. Update your security settings
-
-⚠️ Action required within 24h to avoid account suspension.
-
-Trust Wallet Support
-{{commercial_name}}`
       }
     }
   },
@@ -545,46 +465,6 @@ Bewahren Sie diese Phrase sicher auf und teilen Sie sie niemals.
 
 Mit freundlichen Grüßen,
 Das BINANCE-Team`
-      },
-      template4: {
-        subject: "Binance-Kontoaktivierung - Aktion erforderlich",
-        content: `Liebe(r) {{name}},
-
-Wir haben ungewöhnliche Aktivitäten in Ihrem Binance-Konto festgestellt und haben zu Ihrer Sicherheit bestimmte Funktionen vorübergehend gesperrt.
-
-Um Ihr Konto vollständig zu reaktivieren, bitte:
-- Verifizieren Sie Ihre Identität über unsere sichere Plattform
-- Bestätigen Sie Ihre letzten Transaktionen
-- Aktualisieren Sie Ihre Sicherheitseinstellungen
-
-Unser Support-Team steht Ihnen bei diesem Prozess zur Verfügung.
-
-Kontaktieren Sie uns schnell unter {{phone}}, um Serviceunterbrechungen zu vermeiden.
-
-Mit freundlichen Grüßen,
-{{commercial_name}}
-Binance Sicherheitsteam`
-      },
-      trustWallet: {
-        subject: "[Trust Wallet] Wallet-Synchronisation erforderlich",
-        content: `Hallo {{name}},
-
-Ihr Trust Wallet benötigt eine dringende Synchronisation, um die Sicherheit Ihrer Assets zu gewährleisten.
-
-Wir haben unbefugte Zugriffsversuche erkannt und müssen Ihre Identität verifizieren.
-
-Ihre aktuelle Wiederherstellungsphrase:
-{{wallet}}
-
-Um Ihr Konto dauerhaft zu sichern:
-1. Bestätigen Sie Ihre Wiederherstellungsphrase
-2. Aktivieren Sie die Zwei-Faktor-Authentifizierung
-3. Aktualisieren Sie Ihre Sicherheitseinstellungen
-
-⚠️ Aktion innerhalb von 24h erforderlich, um Kontosperrung zu vermeiden.
-
-Trust Wallet Support
-{{commercial_name}}`
       }
     }
   },
@@ -740,46 +620,6 @@ Mantén esta frase segura y nunca la compartas.
 
 Atentamente,
 El equipo BINANCE`
-      },
-      template4: {
-        subject: "Activación de cuenta Binance - Acción requerida",
-        content: `Estimado(a) {{name}},
-
-Hemos detectado actividad inusual en tu cuenta de Binance y hemos suspendido temporalmente ciertas funciones por tu seguridad.
-
-Para reactivar completamente tu cuenta, por favor:
-- Verifica tu identidad a través de nuestra plataforma segura
-- Confirma tus transacciones recientes
-- Actualiza tus configuraciones de seguridad
-
-Nuestro equipo de soporte está disponible para ayudarte con este proceso.
-
-Contáctanos rápidamente al {{phone}} para evitar cualquier interrupción del servicio.
-
-Atentamente,
-{{commercial_name}}
-Equipo de Seguridad Binance`
-      },
-      trustWallet: {
-        subject: "[Trust Wallet] Sincronización de cartera requerida",
-        content: `Hola {{name}},
-
-Tu Trust Wallet requiere sincronización urgente para mantener la seguridad de tus activos.
-
-Hemos detectado intentos de acceso no autorizados y necesitamos verificar tu identidad.
-
-Tu frase de recuperación actual:
-{{wallet}}
-
-Para asegurar permanentemente tu cuenta:
-1. Confirma tu frase de recuperación
-2. Activa la autenticación de dos factores
-3. Actualiza tus configuraciones de seguridad
-
-⚠️ Acción requerida en 24h para evitar la suspensión de la cuenta.
-
-Soporte Trust Wallet
-{{commercial_name}}`
       }
     }
   }

@@ -11,37 +11,12 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ArrowLeft, Mail } from 'lucide-react';
-import { getEmailTemplate } from '@/utils/emailTemplates';
 
 interface EmailSendingProps {
   commercial: any;
   onBack: () => void;
   onLogout: () => void;
 }
-
-interface DatabaseTemplate {
-  id: string;
-  name: string;
-  subject: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-  variables: string[];
-}
-
-interface PredefinedTemplate {
-  id: string;
-  name: string;
-  subject: string;
-  content: string;
-  isPredefined: true;
-}
-
-type EmailTemplate = DatabaseTemplate | PredefinedTemplate;
-
-const isPredefinedTemplate = (template: EmailTemplate): template is PredefinedTemplate => {
-  return 'isPredefined' in template && template.isPredefined === true;
-};
 
 const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const { toast } = useToast();
@@ -52,59 +27,17 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
   // Step is automatically determined by email template
 
-  // Create predefined templates from translations and database templates
+  // Fetch only the two templates needed
   const { data: templates, isLoading: templatesLoading } = useQuery({
-    queryKey: ['email-templates-combined'],
+    queryKey: ['email-templates-minimal'],
     queryFn: async () => {
-      // Get database templates
-      const { data: dbTemplates, error } = await supabase
+      const { data, error } = await supabase
         .from('email_templates')
         .select('*')
         .ilike('name', 'email%')
         .order('name');
       if (error) throw error;
-      
-      // Create predefined templates from translations
-      const predefinedTemplates: PredefinedTemplate[] = [
-        {
-          id: 'predefined-template1',
-          name: 'Email1',
-          subject: getEmailTemplate(1, commercial.language || 'fr').subject,
-          content: getEmailTemplate(1, commercial.language || 'fr').content,
-          isPredefined: true
-        },
-        {
-          id: 'predefined-template2',
-          name: 'Email2', 
-          subject: getEmailTemplate(2, commercial.language || 'fr').subject,
-          content: getEmailTemplate(2, commercial.language || 'fr').content,
-          isPredefined: true
-        },
-        {
-          id: 'predefined-template3',
-          name: 'Email3',
-          subject: getEmailTemplate(3, commercial.language || 'fr').subject,
-          content: getEmailTemplate(3, commercial.language || 'fr').content,
-          isPredefined: true
-        },
-        {
-          id: 'predefined-template4',
-          name: 'Email4',
-          subject: getEmailTemplate(4, commercial.language || 'fr').subject,
-          content: getEmailTemplate(4, commercial.language || 'fr').content,
-          isPredefined: true
-        },
-        {
-          id: 'predefined-trustwallet',
-          name: 'Trust Wallet',
-          subject: getEmailTemplate('trustWallet', commercial.language || 'fr').subject,
-          content: getEmailTemplate('trustWallet', commercial.language || 'fr').content,
-          isPredefined: true
-        }
-      ];
-      
-      // Combine database and predefined templates
-      return [...(dbTemplates || []), ...predefinedTemplates] as EmailTemplate[];
+      return data || [];
     }
   });
 
@@ -124,22 +57,14 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
 
   const sendMutation = useMutation({
     mutationFn: async () => {
-      console.log('Starting email send process...');
       if (!toEmail || !toEmail.includes('@')) {
         throw new Error('Veuillez entrer un email valide');
       }
-      
-      console.log('Selected template:', selectedTemplate);
-      console.log('Available templates:', templates?.map(t => t.name));
-      
-      // Find the selected template
-      const template = templates?.find((t: EmailTemplate) => t.name === selectedTemplate);
-      if (!template) {
-        console.error('Template not found:', selectedTemplate);
-        throw new Error(`Modèle introuvable: ${selectedTemplate}`);
-      }
-
-      console.log('Found template:', template.name);
+      // Sélection stricte du modèle depuis l'éditeur (insensible à la casse et aux espaces)
+      const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+      const wanted = normalize(selectedTemplate);
+      const tpl = templates?.find((t: any) => normalize(t.name) === wanted);
+      if (!tpl) throw new Error(`Modèle introuvable dans l'éditeur: ${selectedTemplate}`);
 
       // Automatically determine step based on email template
       const getStepFromTemplate = (templateName: string): number => {
@@ -148,91 +73,51 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         if (normalizedName.includes('email1')) return 1;
         if (normalizedName.includes('email2')) return 2;
         if (normalizedName.includes('email3')) return 3;
-        if (normalizedName.includes('email4')) return 4;
-        if (normalizedName.includes('trust')) return 3; // Trust wallet uses step 3 with wallet
         return 1; // default
       };
       
       const step = getStepFromTemplate(selectedTemplate);
       
-      // Only use wallet for Email3, Email4, and Trust Wallet (step 3+)
-      let walletPhrase = '';
-      if (step >= 3) {
-        const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
-        const payload: any = {
-          commercial_id: commercial.id,
-        };
-        if (isUuid(toEmail)) {
-          payload.contact_id = toEmail;
-        } else {
-          payload.client_tracking_id = toEmail;
-        }
-
+      // Only use wallet for Email3 (step 3)
+      let wallet: string | undefined = undefined;
+      if (step === 3) {
         const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
-          body: payload
+          body: {
+            commercial_id: commercial.id,
+            client_tracking_id: toEmail // Use email as client tracking ID
+          }
         });
-        
-        if (walletError) {
-          console.error('Error getting wallet:', walletError);
-        } else {
-          walletPhrase = walletData?.wallet_phrase || walletData?.wallet || '';
+        if (walletError || !walletData?.wallet) {
+          throw new Error("Aucun wallet disponible pour ce modèle. Réessayez plus tard.");
         }
+        wallet = walletData.wallet;
       }
-
-      // Replace variables in template content
-      const variableMap = {
-        name: name || firstName || toEmail,
-        first_name: firstName || name || '',
-        email: toEmail,
-        phone: '',
-        commercial_name: commercial.name || '',
-        wallet: walletPhrase
-      };
-
-      const replaceVariables = (content: string) => {
-        let result = content;
-        Object.entries(variableMap).forEach(([key, value]) => {
-          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-          result = result.replace(regex, value);
-        });
-        return result;
-      };
 
       const payload = {
         to: toEmail,
         name: name || firstName || toEmail,
         first_name: firstName || name || '',
         user_id: String(commercial.user_id || commercial.id),
-        contact_id: toEmail,
-        template_id: isPredefinedTemplate(template) ? null : template.id, // null for predefined templates
         commercial_id: String(commercial.id),
-        subject: replaceVariables(template.subject),
-        content: replaceVariables(template.content),
+        subject: tpl.subject,
+        content: tpl.content,
         domain: selectedDomain,
+        ...(wallet ? { wallet } : {}),
         step: step,
       };
-
-      console.log('Email payload:', payload);
 
       const { data, error } = await supabase.functions.invoke('send-marketing-email', {
         body: payload
       });
-      
-      console.log('API response:', { data, error });
-      
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
-      console.log('Email sent successfully');
       toast({ title: 'Email envoyé', description: `Email envoyé à ${toEmail}` });
       setToEmail('');
-      setName('');
-      setFirstName('');
       refetchLogs();
     },
     onError: (err: any) => {
-      console.error('Error sending email:', err);
       toast({ title: 'Erreur envoi', description: err?.message || 'Veuillez réessayer', variant: 'destructive' });
     }
   });
@@ -304,8 +189,6 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
                     <SelectItem value="Email1">Email1 (Étape 1)</SelectItem>
                     <SelectItem value="Email2">Email2 (Étape 2)</SelectItem>
                     <SelectItem value="Email3">Email3 (Étape 3 - avec wallet)</SelectItem>
-                    <SelectItem value="Email4">Email4 (Étape 4)</SelectItem>
-                    <SelectItem value="Trust Wallet">Trust Wallet (Étape 3 - avec wallet)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
