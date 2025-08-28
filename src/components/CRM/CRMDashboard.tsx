@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Shield, ShieldBan, User, Bot, Search, Filter, Copy, Server, DollarSign, LogOut } from 'lucide-react';
+import { Shield, ShieldBan, User, Bot, Search, Filter, Copy, Server, DollarSign, LogOut, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -72,7 +72,6 @@ const CRMDashboard = () => {
     setLanguage(browserLang.startsWith('fr') ? 'fr' : 'en');
   }, []);
 
-  // Translations
   const t = {
     en: {
       title: 'Lead Management CRM',
@@ -115,7 +114,10 @@ const CRMDashboard = () => {
       cancel: 'Cancel',
       serverIpUpdated: 'Server IP updated successfully',
       checkingBalance: 'Checking balance...',
-      balanceUpdated: 'Balance updated successfully'
+      balanceUpdated: 'Balance updated successfully',
+      deleteAllLeads: 'Delete All Leads',
+      deleteAllLeadsConfirm: 'Are you sure you want to delete all leads? This action cannot be undone.',
+      allLeadsDeleted: 'All leads deleted successfully'
     },
     fr: {
       title: 'CRM de Gestion des Leads',
@@ -158,7 +160,10 @@ const CRMDashboard = () => {
       cancel: 'Annuler',
       serverIpUpdated: 'IP serveur mise à jour avec succès',
       checkingBalance: 'Vérification du solde...',
-      balanceUpdated: 'Solde mis à jour avec succès'
+      balanceUpdated: 'Solde mis à jour avec succès',
+      deleteAllLeads: 'Supprimer Tous les Leads',
+      deleteAllLeadsConfirm: 'Êtes-vous sûr de vouloir supprimer tous les leads? Cette action ne peut pas être annulée.',
+      allLeadsDeleted: 'Tous les leads supprimés avec succès'
     }
   };
 
@@ -479,6 +484,37 @@ const CRMDashboard = () => {
     navigate('/login');
   };
 
+  // Delete all leads function
+  const deleteAllLeads = async () => {
+    if (!window.confirm(currentLang.deleteAllLeadsConfirm)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_leads')
+        .delete()
+        .neq('id', ''); // This will delete all rows since we're using "not equal to empty string"
+
+      if (error) throw error;
+
+      setLeads([]);
+      setFilteredLeads([]);
+      
+      toast({
+        title: currentLang.allLeadsDeleted,
+        description: 'All leads have been removed from the database',
+      });
+    } catch (error) {
+      console.error('Error deleting all leads:', error);
+      toast({
+        title: currentLang.error,
+        description: 'Failed to delete all leads',
+        variant: 'destructive'
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -639,10 +675,21 @@ const CRMDashboard = () => {
             {/* Leads Table */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Leads Database
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Leads Database
+                  </CardTitle>
+                  <Button
+                    onClick={deleteAllLeads}
+                    variant="destructive"
+                    size="sm"
+                    className="flex items-center gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {currentLang.deleteAllLeads}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {loading ? (
