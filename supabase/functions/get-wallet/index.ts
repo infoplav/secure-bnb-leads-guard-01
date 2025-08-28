@@ -28,29 +28,7 @@ serve(async (req) => {
     // Use email as the wallet ID
     const walletId = client_tracking_id;
 
-    console.log(`Getting wallet for commercial ${commercial_id}, client ${walletId || 'unknown'}`);
-
-    // Check if this client already has a wallet assigned
-    if (walletId) {
-      const { data: existingWallet } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('client_tracking_id', walletId)
-        .eq('status', 'used')
-        .maybeSingle();
-
-      if (existingWallet) {
-        console.log(`Found existing wallet for client ${walletId}`);
-        return new Response(JSON.stringify({ 
-          success: true, 
-          wallet: existingWallet.wallet_phrase,
-          wallet_id: existingWallet.id,
-          reused: true
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
+    console.log(`Getting new wallet for commercial ${commercial_id}, client ${walletId || 'unknown'} - never reusing wallets`);
 
     // Get an available wallet
     const { data: availableWallet, error: walletError } = await supabase
