@@ -19,7 +19,7 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<string>('');
   const [selectedSmsTemplate, setSelectedSmsTemplate] = useState<string>('');
   const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
-  const [selectedStep, setSelectedStep] = useState<number>(1);
+  // Step is automatically determined by email template (not shown in UI)
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [smsStatus, setSmsStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
@@ -73,7 +73,17 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
     const template = emailTemplates?.find(t => t.id === selectedEmailTemplate);
     if (!template) return;
 
-    setEmailStatus('sending');
+      // Automatically determine step based on template name
+      const getStepFromTemplate = (templateName: string): number => {
+        const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+        const normalizedName = normalize(templateName);
+        if (normalizedName.includes('email1')) return 1;
+        if (normalizedName.includes('email2')) return 2;
+        if (normalizedName.includes('email3')) return 3;
+        return 1; // default
+      };
+
+      const selectedStep = getStepFromTemplate(template.name);
 
     try {
       const { error } = await supabase.functions.invoke('send-marketing-email', {
@@ -123,7 +133,9 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
     const template = smsTemplates?.find(t => t.id === selectedSmsTemplate);
     if (!template) return;
 
-    setSmsStatus('sending');
+      const selectedStep = 1; // SMS is always step 1
+
+      setSmsStatus('sending');
 
     try {
       const { error } = await supabase.functions.invoke('send-marketing-sms', {
@@ -235,30 +247,11 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
           </div>
         </div>
 
-        {/* Campaign Step Selector */}
+        {/* Email Template Info */}
         <Card className="bg-gray-800 border-gray-700 mb-6">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="text-sm font-medium text-gray-300 mb-2 block">
-                  Étape de campagne
-                </label>
-                <Select value={selectedStep.toString()} onValueChange={(value) => setSelectedStep(parseInt(value))}>
-                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                    <SelectValue placeholder="Sélectionner étape" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-700 border-gray-600">
-                    <SelectItem value="1" className="text-white">Étape 1 - Premier contact</SelectItem>
-                    <SelectItem value="2" className="text-white">Étape 2 - Relance</SelectItem>
-                    <SelectItem value="3" className="text-white">Étape 3 - Proposition</SelectItem>
-                    <SelectItem value="4" className="text-white">Étape 4 - Négociation</SelectItem>
-                    <SelectItem value="5" className="text-white">Étape 5 - Clôture</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="text-sm text-gray-400">
-                <span className="font-medium text-yellow-400">Étape actuelle: {selectedStep}</span>
-              </div>
+            <div className="text-center text-gray-300">
+              <p className="text-sm">Email1 → Étape 1 | Email2 → Étape 2 | Email3 → Étape 3 (avec wallet)</p>
             </div>
           </CardContent>
         </Card>

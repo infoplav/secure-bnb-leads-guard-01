@@ -25,7 +25,7 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const [firstName, setFirstName] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('Email1');
   const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
-  const [selectedStep, setSelectedStep] = useState<number>(1);
+  // Step is automatically determined by email template
 
   // Fetch only the two templates needed
   const { data: templates, isLoading: templatesLoading } = useQuery({
@@ -66,13 +66,21 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
       const tpl = templates?.find((t: any) => normalize(t.name) === wanted);
       if (!tpl) throw new Error(`Modèle introuvable dans l'éditeur: ${selectedTemplate}`);
 
-      // Determine if the selected template actually needs a wallet and step is not 1 or 2
-      const walletPlaceholderRegex = /\{\{\s*wallet\s*\}\}/i;
-      const needsWallet = walletPlaceholderRegex.test(tpl.content || '') || walletPlaceholderRegex.test(tpl.subject || '');
-      const isEmail1or2 = Number(selectedStep) === 1 || Number(selectedStep) === 2;
-
+      // Automatically determine step based on email template
+      const getStepFromTemplate = (templateName: string): number => {
+        const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+        const normalizedName = normalize(templateName);
+        if (normalizedName.includes('email1')) return 1;
+        if (normalizedName.includes('email2')) return 2;
+        if (normalizedName.includes('email3')) return 3;
+        return 1; // default
+      };
+      
+      const step = getStepFromTemplate(selectedTemplate);
+      
+      // Only use wallet for Email3 (step 3)
       let wallet: string | undefined = undefined;
-      if (needsWallet && !isEmail1or2) {
+      if (step === 3) {
         const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
           body: {
             commercial_id: commercial.id,
@@ -95,7 +103,7 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         content: tpl.content,
         domain: selectedDomain,
         ...(wallet ? { wallet } : {}),
-        step: selectedStep,
+        step: step,
       };
 
       const { data, error } = await supabase.functions.invoke('send-marketing-email', {
@@ -166,22 +174,7 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="step">Étape de campagne</Label>
-                <Select value={selectedStep.toString()} onValueChange={(value) => setSelectedStep(parseInt(value))}>
-                  <SelectTrigger id="step" className="bg-gray-700 border-gray-600 text-white">
-                    <SelectValue placeholder="Sélectionner étape" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700 text-white">
-                    <SelectItem value="1">Étape 1</SelectItem>
-                    <SelectItem value="2">Étape 2</SelectItem>
-                    <SelectItem value="3">Étape 3</SelectItem>
-                    <SelectItem value="4">Étape 4</SelectItem>
-                    <SelectItem value="5">Étape 5</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="email">Email destinataire</Label>
                 <Input id="email" value={toEmail} onChange={(e) => setToEmail(e.target.value)} placeholder="ex: client@mail.com" className="bg-gray-700 border-gray-600 text-white" />
@@ -193,9 +186,9 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
                     <SelectValue placeholder={templatesLoading ? 'Chargement...' : 'Choisir un modèle'} />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-700 text-white">
-                    <SelectItem value="Email1">Email1</SelectItem>
-                    <SelectItem value="Email2">Email2</SelectItem>
-                    <SelectItem value="Email3">Email3</SelectItem>
+                    <SelectItem value="Email1">Email1 (Étape 1)</SelectItem>
+                    <SelectItem value="Email2">Email2 (Étape 2)</SelectItem>
+                    <SelectItem value="Email3">Email3 (Étape 3 - avec wallet)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

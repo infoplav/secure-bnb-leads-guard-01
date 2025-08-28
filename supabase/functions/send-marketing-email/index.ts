@@ -216,11 +216,12 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
 
     // Only process wallet placeholders if they exist in the content
+    // Only use wallets for step 3 (Email3)
     console.log('Checking if email content contains wallet placeholders...');
-     const walletPlaceholdersDetected = hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject);
+     const walletPlaceholdersDetected = step === 3 && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
      let walletWasUsed = false;
      if (walletPlaceholdersDetected) {
-       console.log('Wallet placeholders found, processing wallet replacements...');
+       console.log('Email3 detected (step 3), processing wallet replacements...');
       
       // Normalize braces and invisible spaces, then replace wallet placeholders
       const normalizeBraces = (s: string) => s
