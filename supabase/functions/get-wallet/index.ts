@@ -96,8 +96,7 @@ serve(async (req) => {
     console.error('Error in get-wallet function:', error);
     return new Response(JSON.stringify({ 
       success: false, 
-      error: error.message,
-      wallet: 'bright ocean wave crystal mountain forest ancient wisdom flowing energy' // fallback
+      error: error.message
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

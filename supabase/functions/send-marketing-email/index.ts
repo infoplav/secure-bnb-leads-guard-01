@@ -152,9 +152,9 @@ const handler = async (req: Request): Promise<Response> => {
 
         if (getWalletError) {
           console.error('Error calling get-wallet function:', getWalletError);
-        } else if (walletData?.phrase) {
+        } else if ((walletData as any)?.phrase || (walletData as any)?.wallet) {
           console.log('Got wallet from get-wallet function');
-          return walletData.phrase;
+          return ((walletData as any).phrase || (walletData as any).wallet) as string;
         }
 
         // First, try to find an existing wallet assigned to this commercial

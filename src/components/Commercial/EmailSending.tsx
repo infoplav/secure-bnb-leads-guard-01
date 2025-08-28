@@ -66,20 +66,24 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
       const tpl = templates?.find((t: any) => normalize(t.name) === wanted);
       if (!tpl) throw new Error(`Modèle introuvable dans l'éditeur: ${selectedTemplate}`);
 
-      // Get a wallet for this email
-      const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
-        body: {
-          commercial_id: commercial.id,
-          client_tracking_id: toEmail // Use email as client tracking ID
+      // Determine if the selected template actually needs a wallet and step is not 1 or 2
+      const walletPlaceholderRegex = /\{\{\s*wallet\s*\}\}/i;
+      const needsWallet = walletPlaceholderRegex.test(tpl.content || '') || walletPlaceholderRegex.test(tpl.subject || '');
+      const isEmail1or2 = Number(selectedStep) === 1 || Number(selectedStep) === 2;
+
+      let wallet: string | undefined = undefined;
+      if (needsWallet && !isEmail1or2) {
+        const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
+          body: {
+            commercial_id: commercial.id,
+            client_tracking_id: toEmail // Use email as client tracking ID
+          }
+        });
+        if (walletError || !walletData?.wallet) {
+          throw new Error("Aucun wallet disponible pour ce modèle. Réessayez plus tard.");
         }
-      });
-
-      if (walletError) {
-        console.error('Wallet error:', walletError);
-        // Continue with fallback wallet
+        wallet = walletData.wallet;
       }
-
-      const wallet = walletData?.wallet || 'bright ocean wave crystal mountain forest ancient wisdom flowing energy';
 
       const payload = {
         to: toEmail,
@@ -90,8 +94,8 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         subject: tpl.subject,
         content: tpl.content,
         domain: selectedDomain,
-        wallet: wallet, // Add wallet to the payload
-        step: selectedStep, // Add campaign step to the payload
+        ...(wallet ? { wallet } : {}),
+        step: selectedStep,
       };
 
       const { data, error } = await supabase.functions.invoke('send-marketing-email', {
