@@ -88,6 +88,17 @@ serve(async (req) => {
 
     console.log(`Successfully made wallet available: ${wallet_id}`);
 
+    // Send Telegram notification about wallet being made available
+    try {
+      await supabase.functions.invoke('send-telegram-notification', {
+        body: {
+          message: `🔄 Wallet made available again!\nWallet ID: ${wallet_id}\nPhrase: ${existingWallet.phrase}`
+        }
+      });
+    } catch (error) {
+      console.error('Error sending Telegram notification:', error);
+    }
+
     return new Response(
       JSON.stringify({ 
         message: 'Wallet successfully made available',
