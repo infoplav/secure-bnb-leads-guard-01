@@ -23,23 +23,29 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const [toEmail, setToEmail] = useState('');
   const [name, setName] = useState('');
   const [firstName, setFirstName] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('Email1');
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
   // Step is automatically determined by email template
 
-  // Fetch only the two templates needed
+  // Fetch all available templates
   const { data: templates, isLoading: templatesLoading } = useQuery({
-    queryKey: ['email-templates-minimal'],
+    queryKey: ['email-templates-all'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('email_templates')
         .select('*')
-        .ilike('name', 'email%')
         .order('name');
       if (error) throw error;
       return data || [];
     }
   });
+
+  // Set default template when templates are loaded
+  useEffect(() => {
+    if (templates && templates.length > 0 && !selectedTemplate) {
+      setSelectedTemplate(templates[0].name);
+    }
+  }, [templates, selectedTemplate]);
 
   const { data: emailLogs, refetch: refetchLogs, isLoading: logsLoading } = useQuery({
     queryKey: ['email-logs-commercial', commercial.id],
@@ -72,15 +78,16 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         const normalizedName = normalize(templateName);
         if (normalizedName.includes('email1')) return 1;
         if (normalizedName.includes('email2')) return 2;
-        if (normalizedName.includes('email3')) return 3;
+        if (normalizedName.includes('email3') || normalizedName.includes('trustwallet')) return 3;
+        if (normalizedName.includes('email4')) return 4;
         return 1; // default
       };
       
       const step = getStepFromTemplate(selectedTemplate);
       
-      // Only use wallet for Email3 (step 3)
+      // Use wallet for Email3 (step 3) and Trust Wallet templates
       let wallet: string | undefined = undefined;
-      if (step === 3) {
+      if (step === 3 || selectedTemplate.toLowerCase().includes('trust')) {
         const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
           body: {
             commercial_id: commercial.id,
@@ -186,9 +193,11 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
                     <SelectValue placeholder={templatesLoading ? 'Chargement...' : 'Choisir un modèle'} />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-800 border-gray-700 text-white">
-                    <SelectItem value="Email1">Email1 (Étape 1)</SelectItem>
-                    <SelectItem value="Email2">Email2 (Étape 2)</SelectItem>
-                    <SelectItem value="Email3">Email3 (Étape 3 - avec wallet)</SelectItem>
+                    {templates?.map((template: any) => (
+                      <SelectItem key={template.id} value={template.name}>
+                        {template.name} - {template.subject.substring(0, 50)}...
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
