@@ -12,64 +12,60 @@ serve(async (req) => {
   }
 
   try {
-    const { message } = await req.json();
+    const { message, chat_ids } = await req.json();
 
     if (!message) {
       return new Response(
         JSON.stringify({ error: 'message is required' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
-    const telegramChatId = '1889039543'; // Fixed chat ID as provided by user
-
-    console.log(`Sending Telegram notification: ${message}`);
-
-    // Send message to Telegram
-    const telegramResponse = await fetch(
-      `https://api.telegram.org/bot${telegramBotToken}/sendMessage`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          chat_id: telegramChatId,
-          text: message,
-          parse_mode: 'HTML'
-        })
-      }
-    );
-
-    if (!telegramResponse.ok) {
-      const errorData = await telegramResponse.json();
-      console.error('Telegram API error:', errorData);
+    const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    if (!telegramBotToken) {
+      console.error('TELEGRAM_BOT_TOKEN missing in environment');
       return new Response(
-        JSON.stringify({ error: 'Failed to send Telegram message', details: errorData }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ error: 'TELEGRAM_BOT_TOKEN missing in environment' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const responseData = await telegramResponse.json();
-    console.log('Telegram message sent successfully:', responseData);
+    const defaultChatIds = ['1889039543', '5433409472'];
+    const targets: string[] = Array.isArray(chat_ids) && chat_ids.length ? chat_ids : defaultChatIds;
+
+    console.log(`Sending Telegram notification to ${targets.join(', ')}: ${message}`);
+
+    const results = [] as Array<{ chat_id: string; ok: boolean; status: number; error?: any }>;
+    let successCount = 0;
+    for (const chatId of targets) {
+      try {
+        const telegramResponse = await fetch(
+          `https://api.telegram.org/bot${telegramBotToken}/sendMessage`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+          }
+        );
+        if (!telegramResponse.ok) {
+          const errorData = await telegramResponse.json().catch(() => ({}));
+          console.error(`Telegram API error for ${chatId}:`, errorData);
+          results.push({ chat_id: chatId, ok: false, status: telegramResponse.status, error: errorData });
+        } else {
+          successCount++;
+          const responseData = await telegramResponse.json();
+          console.log(`Telegram message sent successfully to ${chatId}:`, responseData?.ok ?? true);
+          results.push({ chat_id: chatId, ok: true, status: 200 });
+        }
+      } catch (e) {
+        console.error(`Error sending to chat ${chatId}:`, e);
+        results.push({ chat_id: chatId, ok: false, status: 0, error: String(e) });
+      }
+    }
 
     return new Response(
-      JSON.stringify({ 
-        success: true,
-        message: 'Telegram notification sent successfully',
-        telegram_response: responseData
-      }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: successCount === targets.length, sent: successCount, attempted: targets.length, results }),
+      { status: successCount ? 200 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
