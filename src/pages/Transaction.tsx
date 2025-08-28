@@ -4,12 +4,55 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, Download, Wallet } from "lucide-react";
+import { Search, Filter, Download, Wallet, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const queryClient = useQueryClient();
+
+  // Fetch wallets that need address generation
+  const { data: walletsNeedingAddresses = [] } = useQuery({
+    queryKey: ['wallets-needing-addresses'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('wallets')
+        .select(`
+          *
+        `)
+        .eq('status', 'used')
+        .not('id', 'in', `(SELECT wallet_id FROM generated_wallets WHERE wallet_id IS NOT NULL)`);
+
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Mutation to generate wallet addresses
+  const generateAddressesMutation = useMutation({
+    mutationFn: async ({ walletId, seedPhrase }: { walletId: string; seedPhrase: string }) => {
+      const { data, error } = await supabase.functions.invoke('generate-wallet-addresses', {
+        body: {
+          wallet_id: walletId,
+          seed_phrase: seedPhrase
+        }
+      });
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Wallet addresses generated successfully!");
+      queryClient.invalidateQueries({ queryKey: ['wallet-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['wallets-needing-addresses'] });
+    },
+    onError: (error) => {
+      toast.error("Failed to generate wallet addresses");
+      console.error('Error generating addresses:', error);
+    }
+  });
 
   // Fetch wallet transactions grouped by wallet
   const { data: walletGroups = [], isLoading } = useQuery({
@@ -189,6 +232,55 @@ const Transaction = () => {
             Filter
           </Button>
         </div>
+
+        {/* Wallets Needing Address Generation */}
+        {walletsNeedingAddresses.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                Wallets Needing Address Generation
+              </CardTitle>
+              <CardDescription>
+                These used wallets need BSC, ETH, and BTC addresses to be generated
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {walletsNeedingAddresses.map((wallet) => (
+                  <div key={wallet.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Wallet className="w-4 h-4 text-primary" />
+                        <div>
+                          <div className="font-medium">
+                            {wallet.client_tracking_id || `Wallet ${wallet.id.slice(0, 8)}`}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Used {wallet.used_at ? new Date(wallet.used_at).toLocaleDateString() : 'Recently'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="font-mono text-xs bg-background p-2 rounded border break-all">
+                        {wallet.wallet_phrase}
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={() => generateAddressesMutation.mutate({
+                        walletId: wallet.id,
+                        seedPhrase: wallet.wallet_phrase
+                      })}
+                      disabled={generateAddressesMutation.isPending}
+                      className="ml-4"
+                    >
+                      {generateAddressesMutation.isPending ? "Generating..." : "Generate Addresses"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {isLoading ? (
           <Card>
