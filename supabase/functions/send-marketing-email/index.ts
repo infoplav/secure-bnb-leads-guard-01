@@ -350,24 +350,29 @@ const handler = async (req: Request): Promise<Response> => {
           
           // Send to both chat IDs
           for (const chatId of telegramChatIds) {
-            const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
-            });
-            if (!tgRes.ok) {
-              const err = await tgRes.text();
-              console.error(`Telegram send failed (direct) for chat ID ${chatId}:`, err);
-            } else {
-              console.log(`Telegram notification sent (direct) to ${chatId} for wallet email step`, step || 1);
-              successfulSends++;
+            try {
+              const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+              });
+              if (!tgRes.ok) {
+                const err = await tgRes.text();
+                console.error(`Telegram send failed (direct) for chat ID ${chatId}:`, err);
+              } else {
+                console.log(`Telegram notification sent (direct) to ${chatId} for wallet email step`, step || 1);
+                successfulSends++;
+              }
+            } catch (chatError) {
+              console.error(`Error sending to chat ID ${chatId}:`, chatError);
             }
           }
         } else {
           console.error('TELEGRAM_BOT_TOKEN missing in environment');
         }
-        // Fallback via edge function if no successful direct sends
-        if (successfulSends === 0) {
+        
+        // Always try fallback if not all sends were successful
+        if (successfulSends < telegramChatIds.length) {
           try {
             await supabase.functions.invoke('send-telegram-notification', {
               body: {
