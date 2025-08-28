@@ -32,8 +32,17 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
       
       if (error) throw error;
       
-      // Sort numerically by extracting number from name (email1, email2, etc.)
+      // Sort numerically by extracting number from name, with Trust Wallet templates at the end
       return data?.sort((a, b) => {
+        const isTrustA = a.name.toLowerCase().includes('trust');
+        const isTrustB = b.name.toLowerCase().includes('trust');
+        
+        // Trust Wallet templates go to the end
+        if (isTrustA && !isTrustB) return 1;
+        if (!isTrustA && isTrustB) return -1;
+        if (isTrustA && isTrustB) return a.name.localeCompare(b.name);
+        
+        // Regular numerical sorting for non-Trust templates
         const numA = parseInt(a.name.match(/\d+/)?.[0] || '0');
         const numB = parseInt(b.name.match(/\d+/)?.[0] || '0');
         return numA - numB;
