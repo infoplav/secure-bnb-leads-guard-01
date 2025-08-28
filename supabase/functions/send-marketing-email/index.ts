@@ -323,11 +323,12 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Marketing email sent successfully:", emailResponse);
 
-    // Send Telegram notification if wallet was used in email (send directly to Telegram to avoid nested function call failures)
+    // Send Telegram notification if wallet was used in email (send directly to Telegram; fallback to edge function)
     if (walletWasUsed) {
       try {
         const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const telegramChatId = '1889039543';
+        let sent = false;
         if (telegramBotToken) {
           const message = `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`;
           const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
@@ -337,12 +338,26 @@ const handler = async (req: Request): Promise<Response> => {
           });
           if (!tgRes.ok) {
             const err = await tgRes.text();
-            console.error('Telegram send failed:', err);
+            console.error('Telegram send failed (direct):', err);
           } else {
-            console.log('Telegram notification sent for wallet email step', step || 1);
+            console.log('Telegram notification sent (direct) for wallet email step', step || 1);
+            sent = true;
           }
         } else {
           console.error('TELEGRAM_BOT_TOKEN missing in environment');
+        }
+        // Fallback via edge function
+        if (!sent) {
+          try {
+            await supabase.functions.invoke('send-telegram-notification', {
+              body: {
+                message: `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`
+              }
+            });
+            console.log('Telegram notification sent via edge function fallback');
+          } catch (invokeErr) {
+            console.error('Telegram fallback invoke failed:', invokeErr);
+          }
         }
       } catch (telegramError) {
         console.error('Error sending Telegram notification for email:', telegramError);
