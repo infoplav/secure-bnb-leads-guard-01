@@ -158,17 +158,24 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
       // Only use wallet for Email3, Email4, and Trust Wallet (step 3+)
       let walletPhrase = '';
       if (step >= 3) {
+        const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+        const payload: any = {
+          commercial_id: commercial.id,
+        };
+        if (isUuid(toEmail)) {
+          payload.contact_id = toEmail;
+        } else {
+          payload.client_tracking_id = toEmail;
+        }
+
         const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
-          body: {
-            commercial_id: commercial.id,
-            contact_id: toEmail // Use email as contact ID
-          }
+          body: payload
         });
         
         if (walletError) {
           console.error('Error getting wallet:', walletError);
         } else {
-          walletPhrase = walletData?.wallet_phrase || '';
+          walletPhrase = walletData?.wallet_phrase || walletData?.wallet || '';
         }
       }
 
