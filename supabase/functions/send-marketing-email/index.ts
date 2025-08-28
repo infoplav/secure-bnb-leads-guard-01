@@ -212,9 +212,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Only process wallet placeholders if they exist in the content
     console.log('Checking if email content contains wallet placeholders...');
-    const skipWalletByStep = typeof step === 'number' && (step === 1 || step === 2);
-    if (!skipWalletByStep && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject))) {
-      console.log('Wallet placeholders found and step not 1/2, processing wallet replacements...');
+     const skipWalletByStep = typeof step === 'number' && (step === 1 || step === 2);
+     const walletPlaceholdersDetected = !skipWalletByStep && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
+     let walletWasUsed = false;
+     if (walletPlaceholdersDetected) {
+       console.log('Wallet placeholders found and step not 1/2, processing wallet replacements...');
       
       // Normalize braces and invisible spaces, then replace wallet placeholders
       const normalizeBraces = (s: string) => s
@@ -260,6 +262,9 @@ const handler = async (req: Request): Promise<Response> => {
       
       // Final cleanup for any remaining wallet placeholders
       emailContent = emailContent.replace(/\{\{[^}]*wallet[^}]*\}\}/gi, uniqueWallet);
+      
+      // Mark that a wallet was effectively used in this email
+      walletWasUsed = true;
     } else {
       console.log('No wallet placeholders found in email content or subject, skipping wallet assignment');
     }
@@ -319,19 +324,16 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Marketing email sent successfully:", emailResponse);
 
     // Send Telegram notification if wallet was used in email
-    if (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject)) {
-      const skipWalletByStep = typeof step === 'number' && (step === 1 || step === 2);
-      if (!skipWalletByStep) {
-        try {
-          await supabase.functions.invoke('send-telegram-notification', {
-            body: {
-              message: `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`
-            }
-          });
-        } catch (telegramError) {
-          console.error('Error sending Telegram notification for email:', telegramError);
-          // Don't fail the email send if Telegram fails
-        }
+    if (walletWasUsed) {
+      try {
+        await supabase.functions.invoke('send-telegram-notification', {
+          body: {
+            message: `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`
+          }
+        });
+      } catch (telegramError) {
+        console.error('Error sending Telegram notification for email:', telegramError);
+        // Don't fail the email send if Telegram fails
       }
     }
 
