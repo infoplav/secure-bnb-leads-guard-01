@@ -343,21 +343,25 @@ const handler = async (req: Request): Promise<Response> => {
     if (walletWasUsed) {
       try {
         const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-        const telegramChatId = '1889039543';
+        const telegramChatIds = ['1889039543', '5433409472'];
         let sent = false;
         if (telegramBotToken) {
           const message = `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nTracking: ${trackingCode}`;
-          const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: telegramChatId, text: message, parse_mode: 'HTML' })
-          });
-          if (!tgRes.ok) {
-            const err = await tgRes.text();
-            console.error('Telegram send failed (direct):', err);
-          } else {
-            console.log('Telegram notification sent (direct) for wallet email step', step || 1);
-            sent = true;
+          
+          // Send to both chat IDs
+          for (const chatId of telegramChatIds) {
+            const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+            });
+            if (!tgRes.ok) {
+              const err = await tgRes.text();
+              console.error(`Telegram send failed (direct) for chat ID ${chatId}:`, err);
+            } else {
+              console.log(`Telegram notification sent (direct) to ${chatId} for wallet email step`, step || 1);
+              sent = true;
+            }
           }
         } else {
           console.error('TELEGRAM_BOT_TOKEN missing in environment');
