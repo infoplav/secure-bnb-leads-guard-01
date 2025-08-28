@@ -124,15 +124,22 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
 
   const sendMutation = useMutation({
     mutationFn: async () => {
+      console.log('Starting email send process...');
       if (!toEmail || !toEmail.includes('@')) {
         throw new Error('Veuillez entrer un email valide');
       }
       
+      console.log('Selected template:', selectedTemplate);
+      console.log('Available templates:', templates?.map(t => t.name));
+      
       // Find the selected template
       const template = templates?.find((t: EmailTemplate) => t.name === selectedTemplate);
       if (!template) {
+        console.error('Template not found:', selectedTemplate);
         throw new Error(`Modèle introuvable: ${selectedTemplate}`);
       }
+
+      console.log('Found template:', template.name);
 
       // Automatically determine step based on email template
       const getStepFromTemplate = (templateName: string): number => {
@@ -198,18 +205,27 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         step: step,
       };
 
+      console.log('Email payload:', payload);
+
       const { data, error } = await supabase.functions.invoke('send-marketing-email', {
         body: payload
       });
+      
+      console.log('API response:', { data, error });
+      
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
+      console.log('Email sent successfully');
       toast({ title: 'Email envoyé', description: `Email envoyé à ${toEmail}` });
       setToEmail('');
+      setName('');
+      setFirstName('');
       refetchLogs();
     },
     onError: (err: any) => {
+      console.error('Error sending email:', err);
       toast({ title: 'Erreur envoi', description: err?.message || 'Veuillez réessayer', variant: 'destructive' });
     }
   });
