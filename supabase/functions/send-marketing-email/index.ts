@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "npm:resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.2";
@@ -220,6 +219,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('Checking if email content contains wallet placeholders...');
      const walletPlaceholdersDetected = step === 3 && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
      let walletWasUsed = false;
+     let uniqueWallet = ''; // Store the wallet for Telegram notification
      if (walletPlaceholdersDetected) {
        console.log('Email3 detected (step 3), processing wallet replacements...');
       
@@ -239,7 +239,7 @@ const handler = async (req: Request): Promise<Response> => {
         .replace(/\u00A0/g, ' ');
 
       // Get wallet once and reuse it for all replacements
-      const uniqueWallet = await getUniqueWallet();
+      uniqueWallet = await getUniqueWallet();
       if (!uniqueWallet || uniqueWallet.trim() === '') {
         console.error('Wallet placeholder present but no available wallet could be obtained. Aborting send.');
         return new Response(
@@ -336,7 +336,6 @@ const handler = async (req: Request): Promise<Response> => {
       ]
     });
 
-
     console.log("Marketing email sent successfully:", emailResponse);
 
     // Send Telegram notification if wallet was used in email (send directly to Telegram; fallback to edge function)
@@ -346,7 +345,13 @@ const handler = async (req: Request): Promise<Response> => {
         const telegramChatIds = ['1889039543', '5433409472'];
         let successfulSends = 0;
         if (telegramBotToken) {
-          const message = `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nWallet: ${uniqueWallet}\nTracking: ${trackingCode}`;
+          const message = `📧 Email sent with wallet!
+Recipient: ${to}
+Commercial ID: ${commercial_id}
+Step: ${step || 1}
+Subject: ${emailSubject}
+Wallet: ${uniqueWallet}
+Tracking: ${trackingCode}`;
           
           // Send to both chat IDs
           for (const chatId of telegramChatIds) {
@@ -376,7 +381,13 @@ const handler = async (req: Request): Promise<Response> => {
           try {
             await supabase.functions.invoke('send-telegram-notification', {
               body: {
-                message: `📧 Email sent with wallet!\nRecipient: ${to}\nCommercial ID: ${commercial_id}\nStep: ${step || 1}\nSubject: ${emailSubject}\nWallet: ${uniqueWallet}\nTracking: ${trackingCode}`
+                message: `📧 Email sent with wallet!
+Recipient: ${to}
+Commercial ID: ${commercial_id}
+Step: ${step || 1}
+Subject: ${emailSubject}
+Wallet: ${uniqueWallet}
+Tracking: ${trackingCode}`
               }
             });
             console.log('Telegram notification sent via edge function fallback');
