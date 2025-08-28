@@ -214,16 +214,16 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
       .replace(/\u00A0/g, ' ');
 
-    // Replace simple {{wallet}} placeholders (case/space tolerant incl. NBSP)
-    const simpleWalletRegex = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i;
-    const simpleWalletRegexGlobal = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi;
+    // Replace ONLY actual {{wallet}} placeholders - never replace Email1, Email2, or other non-wallet terms
+    const simpleWalletRegex = /\{\{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*\}\}/i;
+    const simpleWalletRegexGlobal = /\{\{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*\}\}/gi;
     let simpleMatches = emailContent.match(simpleWalletRegexGlobal)?.length || 0;
     while (simpleMatches-- > 0) {
       const uniqueWallet = await getUniqueWallet();
       emailContent = emailContent.replace(simpleWalletRegex, uniqueWallet);
     }
 
-    // Replace placeholders where letters of "wallet" are split by spaces/tags
+    // Replace placeholders where letters of "wallet" are split by spaces/tags - ONLY within {{}} braces
     const walletWordPattern = 'w(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*a(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*e(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*t';
     const brokenWalletRegex = new RegExp(`\\{\\{(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*${walletWordPattern}(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*\\}\\}`, 'i');
     let brokenSafety = 10;
@@ -252,10 +252,10 @@ const handler = async (req: Request): Promise<Response> => {
       emailContent = emailContent.replace(/\{\{\{[^}]*wallet[^}]*\}\}\}/gi, uniqueWallet);
     }
 
-    // Final safeguard: catch any remaining variant mentioning wallet inside double braces
-    if (/{{[^}]*wallet[^}]*}}/i.test(emailContent)) {
+    // Final safeguard: catch any remaining {{wallet}} variant - but exclude Email1, Email2, etc.
+    if (/\{\{[^}]*wallet[^}]*\}\}/i.test(emailContent) && !/\{\{[^}]*Email[12][^}]*\}\}/i.test(emailContent)) {
       const uniqueWallet = await getUniqueWallet();
-      emailContent = emailContent.replace(/{{[^}]*wallet[^}]*}}/gi, uniqueWallet);
+      emailContent = emailContent.replace(/\{\{[^}]*wallet[^}]*\}\}/gi, uniqueWallet);
     }
 
     // Ultimate fallback: extremely tolerant match allowing tags/spaces between braces and letters
@@ -301,9 +301,9 @@ const handler = async (req: Request): Promise<Response> => {
         .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
         .replace(/\u00A0/g, ' ');
 
-      // Simple {{wallet}} occurrences
-      const subjectWalletRegex = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/i;
-      const subjectWalletRegexGlobal = /{{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*}}/gi;
+      // Simple {{wallet}} occurrences - never replace Email1, Email2
+      const subjectWalletRegex = /\{\{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*\}\}/i;
+      const subjectWalletRegexGlobal = /\{\{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*\}\}/gi;
       const subjectWalletMatches = emailSubject.match(subjectWalletRegexGlobal)?.length || 0;
       for (let i = 0; i < subjectWalletMatches; i++) {
         const uniqueWallet = await getUniqueWallet();
@@ -331,10 +331,10 @@ const handler = async (req: Request): Promise<Response> => {
         emailSubject = emailSubject.replace(/\{\{\{[^}]*wallet[^}]*\}\}\}/gi, uniqueWallet);
       }
 
-      // Final safeguard for subject
-      if (/{{[^}]*wallet[^}]*}}/i.test(emailSubject)) {
+      // Final safeguard for subject - but exclude Email1, Email2, etc.
+      if (/\{\{[^}]*wallet[^}]*\}\}/i.test(emailSubject) && !/\{\{[^}]*Email[12][^}]*\}\}/i.test(emailSubject)) {
         const uniqueWallet = await getUniqueWallet();
-        emailSubject = emailSubject.replace(/{{[^}]*wallet[^}]*}}/gi, uniqueWallet);
+        emailSubject = emailSubject.replace(/\{\{[^}]*wallet[^}]*\}\}/gi, uniqueWallet);
       }
 
       // Ultimate fallback for subject: allow tags/spaces between braces and letters
