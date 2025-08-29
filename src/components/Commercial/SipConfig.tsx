@@ -25,10 +25,10 @@ export interface SipConfig {
 const SipConfig = ({ onConfigSaved, onClose, commercial, initialConfig }: SipConfigProps) => {
   const { toast } = useToast();
   const [config, setConfig] = useState<SipConfig>({
-    username: initialConfig?.username || '8204',
+    username: initialConfig?.username || '8200',
     domain: initialConfig?.domain || '195.154.179.234',
-    password: initialConfig?.password || 'trips@8204',
-    number: initialConfig?.number || '8204',
+    password: initialConfig?.password || 'qwerty@8007',
+    number: initialConfig?.number || '8200',
     port: initialConfig?.port || '5744',
     enabled: initialConfig?.enabled || true
   });
