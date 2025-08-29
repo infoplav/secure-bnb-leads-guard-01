@@ -215,13 +215,41 @@ const handler = async (req: Request): Promise<Response> => {
       .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
 
     // Only process wallet placeholders if they exist in the content
-    // Only use wallets for step 3 (Email3)
+    // Use wallets for step 3 (Email3) OR Trust Wallet templates OR if commercial has auto_include_wallet enabled
     console.log('Checking if email content contains wallet placeholders...');
-    const walletPlaceholdersDetected = step === 3 && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
+    
+    // Check if it's a Trust Wallet template
+    const isTrustWalletTemplate = (emailSubject || emailContent || '')
+      .toLowerCase()
+      .includes('trust') || 
+      (emailSubject || emailContent || '')
+      .toLowerCase()
+      .includes('trustwallet');
+    
+    // Check if commercial has auto_include_wallet enabled
+    let commercialAutoIncludeWallet = false;
+    if (commercial_id) {
+      try {
+        const { data: commercialData, error: commercialError } = await supabase
+          .from('commercials')
+          .select('auto_include_wallet')
+          .eq('id', commercial_id)
+          .single();
+        
+        if (!commercialError && commercialData?.auto_include_wallet) {
+          commercialAutoIncludeWallet = true;
+          console.log('Commercial has auto_include_wallet enabled');
+        }
+      } catch (err) {
+        console.warn('Could not fetch commercial auto_include_wallet setting:', err);
+      }
+    }
+    
+    const walletPlaceholdersDetected = (step === 3 || isTrustWalletTemplate || commercialAutoIncludeWallet) && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject));
      let walletWasUsed = false;
      let uniqueWallet = ''; // Store the wallet for Telegram notification
      if (walletPlaceholdersDetected) {
-       console.log('Email3 detected (step 3), processing wallet replacements...');
+       console.log(`Wallet processing enabled: ${step === 3 ? 'Email3' : ''}${isTrustWalletTemplate ? ' Trust Wallet' : ''}${commercialAutoIncludeWallet ? ' Auto-include' : ''}, processing wallet replacements...`);
       
       // Normalize braces and invisible spaces, then replace wallet placeholders
       const normalizeBraces = (s: string) => s
