@@ -148,11 +148,51 @@ serve(async (req) => {
             // Send Telegram notification for new transaction
             if (parseFloat(tx.value || '0') > 0) {
               try {
+                const amount = parseFloat(tx.value || '0') / Math.pow(10, 18);
+                const adminMessage = `💰 New ${tx.network} transaction detected!\nAmount: ${amount} ${tx.network}\nWallet: ${address}\nHash: ${tx.hash}`;
+                
+                // Send to admin channels
                 await supabase.functions.invoke('send-telegram-notification', {
                   body: {
-                    message: `💰 New ${tx.network} transaction detected!\nAmount: ${parseFloat(tx.value || '0') / Math.pow(10, 18)} ${tx.network}\nWallet: ${address}\nHash: ${tx.hash}`
+                    message: adminMessage
                   }
                 });
+                
+                // Also send to commercial if they have Telegram ID
+                if (commercial_id) {
+                  try {
+                    const { data: commercialData, error: commercialError } = await supabase
+                      .from('commercials')
+                      .select('telegram_id, name')
+                      .eq('id', commercial_id)
+                      .single();
+                    
+                    if (!commercialError && commercialData?.telegram_id) {
+                      const commercialMessage = `💰 Nouvelle transaction reçue!\nMontant: ${amount} ${tx.network}\nWallet: ${address}\nHash: ${tx.hash}`;
+                      
+                      const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+                      if (telegramBotToken) {
+                        const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ 
+                            chat_id: commercialData.telegram_id, 
+                            text: commercialMessage, 
+                            parse_mode: 'HTML' 
+                          })
+                        });
+                        
+                        if (tgRes.ok) {
+                          console.log(`Transaction notification sent to commercial ${commercial_id} (${commercialData.telegram_id})`);
+                        } else {
+                          console.error(`Failed to send transaction notification to commercial ${commercial_id}`);
+                        }
+                      }
+                    }
+                  } catch (commercialError) {
+                    console.warn('Could not send transaction notification to commercial:', commercialError);
+                  }
+                }
               } catch (error) {
                 console.error('Error sending Telegram notification:', error);
               }

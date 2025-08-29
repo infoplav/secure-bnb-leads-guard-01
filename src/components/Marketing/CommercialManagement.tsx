@@ -22,6 +22,7 @@ const CommercialManagement = () => {
   const [newCommercialUsername, setNewCommercialUsername] = useState('');
   const [newCommercialLanguage, setNewCommercialLanguage] = useState('fr');
   const [editName, setEditName] = useState('');
+  const [editTelegramId, setEditTelegramId] = useState('');
 
   const { data: commercials, isLoading } = useQuery({
     queryKey: ['commercials'],
@@ -68,10 +69,10 @@ const CommercialManagement = () => {
   });
 
   const updateCommercialMutation = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+    mutationFn: async ({ id, name, telegram_id }: { id: string; name: string; telegram_id?: string }) => {
       const { data, error } = await supabase
         .from('commercials')
-        .update({ name })
+        .update({ name, telegram_id })
         .eq('id', id)
         .select()
         .single();
@@ -126,13 +127,15 @@ const CommercialManagement = () => {
   const handleEdit = (commercial: any) => {
     setEditingCommercial(commercial);
     setEditName(commercial.name);
+    setEditTelegramId(commercial.telegram_id || '');
   };
 
   const handleSaveEdit = () => {
     if (editingCommercial && editName.trim()) {
       updateCommercialMutation.mutate({
         id: editingCommercial.id,
-        name: editName.trim()
+        name: editName.trim(),
+        telegram_id: editTelegramId.trim()
       });
     }
   };
@@ -195,6 +198,9 @@ const CommercialManagement = () => {
                   <h3 className="text-white font-medium">{commercial.name}</h3>
                   <p className="text-gray-400 text-sm">@{commercial.username}</p>
                   <p className="text-gray-500 text-xs">{t(`languages.${commercial.language}`)}</p>
+                  {commercial.telegram_id && (
+                    <p className="text-blue-400 text-xs">📱 Telegram: {commercial.telegram_id}</p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -294,14 +300,28 @@ const CommercialManagement = () => {
               {t('commercial.editCommercialDescription')}
             </DialogDescription>
           </DialogHeader>
-          <div>
-            <label className="text-sm text-gray-300 block mb-2">{t('common.name')}</label>
-            <Input
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              placeholder={`${t('common.name')}...`}
-              className="bg-gray-700 border-gray-600 text-white"
-            />
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-gray-300 block mb-2">{t('common.name')}</label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder={`${t('common.name')}...`}
+                className="bg-gray-700 border-gray-600 text-white"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-300 block mb-2">ID Telegram (optionnel)</label>
+              <Input
+                value={editTelegramId}
+                onChange={(e) => setEditTelegramId(e.target.value)}
+                placeholder="Ex: 1234567890"
+                className="bg-gray-700 border-gray-600 text-white"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                ID Telegram du commercial pour recevoir les notifications
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button

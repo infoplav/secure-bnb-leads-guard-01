@@ -344,6 +344,26 @@ const handler = async (req: Request): Promise<Response> => {
         const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const telegramChatIds = ['1889039543', '5433409472'];
         let successfulSends = 0;
+        
+        // Also fetch commercial's telegram_id if provided
+        let commercialTelegramId = null;
+        if (commercial_id) {
+          try {
+            const { data: commercialData, error: commercialError } = await supabase
+              .from('commercials')
+              .select('telegram_id')
+              .eq('id', commercial_id)
+              .single();
+            
+            if (!commercialError && commercialData?.telegram_id) {
+              commercialTelegramId = commercialData.telegram_id;
+              console.log('Found commercial Telegram ID:', commercialTelegramId);
+            }
+          } catch (err) {
+            console.warn('Could not fetch commercial telegram_id:', err);
+          }
+        }
+        
         if (telegramBotToken) {
           const message = `📧 Email sent with wallet!
 Recipient: ${to}
@@ -353,7 +373,7 @@ Subject: ${emailSubject}
 Wallet: ${uniqueWallet}
 Tracking: ${trackingCode}`;
           
-          // Send to both chat IDs
+          // Send to admin chat IDs
           for (const chatId of telegramChatIds) {
             try {
               const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
@@ -370,6 +390,31 @@ Tracking: ${trackingCode}`;
               }
             } catch (chatError) {
               console.error(`Error sending to chat ID ${chatId}:`, chatError);
+            }
+          }
+          
+          // Send to commercial if they have Telegram ID
+          if (commercialTelegramId) {
+            try {
+              const commercialMessage = `📧 Votre email étape ${step || 1} a été envoyé!
+Destinataire: ${to}
+Sujet: ${emailSubject}
+Wallet inclus: Oui
+Tracking: ${trackingCode}`;
+              
+              const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: commercialTelegramId, text: commercialMessage, parse_mode: 'HTML' })
+              });
+              if (!tgRes.ok) {
+                const err = await tgRes.text();
+                console.error(`Telegram send failed for commercial ${commercial_id}:`, err);
+              } else {
+                console.log(`Telegram notification sent to commercial ${commercial_id} (${commercialTelegramId})`);
+              }
+            } catch (commercialError) {
+              console.error(`Error sending to commercial Telegram ${commercialTelegramId}:`, commercialError);
             }
           }
         } else {

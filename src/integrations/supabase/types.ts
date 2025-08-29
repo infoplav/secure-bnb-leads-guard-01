@@ -119,6 +119,7 @@ export type Database = {
           sip_port: number | null
           sip_server: string | null
           sip_username: string | null
+          telegram_id: string | null
           total_earnings: number | null
           updated_at: string | null
           user_id: string | null
@@ -135,6 +136,7 @@ export type Database = {
           sip_port?: number | null
           sip_server?: string | null
           sip_username?: string | null
+          telegram_id?: string | null
           total_earnings?: number | null
           updated_at?: string | null
           user_id?: string | null
@@ -151,6 +153,7 @@ export type Database = {
           sip_port?: number | null
           sip_server?: string | null
           sip_username?: string | null
+          telegram_id?: string | null
           total_earnings?: number | null
           updated_at?: string | null
           user_id?: string | null
