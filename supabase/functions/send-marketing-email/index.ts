@@ -419,7 +419,6 @@ Tracking: ${trackingCode}`;
               const commercialMessage = `📧 Votre email étape ${step || 1} a été envoyé!
 Destinataire: ${to}
 Sujet: ${emailSubject}
-Wallet inclus: Oui
 Tracking: ${trackingCode}`;
               
               const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
