@@ -109,6 +109,7 @@ export type Database = {
       }
       commercials: {
         Row: {
+          auto_include_wallet: boolean | null
           balance: number | null
           created_at: string | null
           id: string
@@ -126,6 +127,7 @@ export type Database = {
           username: string
         }
         Insert: {
+          auto_include_wallet?: boolean | null
           balance?: number | null
           created_at?: string | null
           id?: string
@@ -143,6 +145,7 @@ export type Database = {
           username: string
         }
         Update: {
+          auto_include_wallet?: boolean | null
           balance?: number | null
           created_at?: string | null
           id?: string

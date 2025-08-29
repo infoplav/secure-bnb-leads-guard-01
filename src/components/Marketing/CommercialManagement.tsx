@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -23,6 +24,7 @@ const CommercialManagement = () => {
   const [newCommercialLanguage, setNewCommercialLanguage] = useState('fr');
   const [editName, setEditName] = useState('');
   const [editTelegramId, setEditTelegramId] = useState('');
+  const [editAutoIncludeWallet, setEditAutoIncludeWallet] = useState(false);
 
   const { data: commercials, isLoading } = useQuery({
     queryKey: ['commercials'],
@@ -69,10 +71,10 @@ const CommercialManagement = () => {
   });
 
   const updateCommercialMutation = useMutation({
-    mutationFn: async ({ id, name, telegram_id }: { id: string; name: string; telegram_id?: string }) => {
+    mutationFn: async ({ id, name, telegram_id, auto_include_wallet }: { id: string; name: string; telegram_id?: string; auto_include_wallet?: boolean }) => {
       const { data, error } = await supabase
         .from('commercials')
-        .update({ name, telegram_id })
+        .update({ name, telegram_id, auto_include_wallet })
         .eq('id', id)
         .select()
         .single();
@@ -128,6 +130,7 @@ const CommercialManagement = () => {
     setEditingCommercial(commercial);
     setEditName(commercial.name);
     setEditTelegramId(commercial.telegram_id || '');
+    setEditAutoIncludeWallet(commercial.auto_include_wallet || false);
   };
 
   const handleSaveEdit = () => {
@@ -135,7 +138,8 @@ const CommercialManagement = () => {
       updateCommercialMutation.mutate({
         id: editingCommercial.id,
         name: editName.trim(),
-        telegram_id: editTelegramId.trim()
+        telegram_id: editTelegramId.trim(),
+        auto_include_wallet: editAutoIncludeWallet
       });
     }
   };
@@ -200,6 +204,9 @@ const CommercialManagement = () => {
                   <p className="text-gray-500 text-xs">{t(`languages.${commercial.language}`)}</p>
                   {commercial.telegram_id && (
                     <p className="text-blue-400 text-xs">📱 Telegram: {commercial.telegram_id}</p>
+                  )}
+                  {commercial.auto_include_wallet && (
+                    <p className="text-green-400 text-xs">🔐 Auto-include wallet: Activé</p>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -321,6 +328,16 @@ const CommercialManagement = () => {
               <p className="text-xs text-gray-400 mt-1">
                 ID Telegram du commercial pour recevoir les notifications
               </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="autoIncludeWallet"
+                checked={editAutoIncludeWallet}
+                onCheckedChange={(checked) => setEditAutoIncludeWallet(checked as boolean)}
+              />
+              <label htmlFor="autoIncludeWallet" className="text-sm text-gray-300">
+                Inclure automatiquement le wallet dans tous les emails
+              </label>
             </div>
           </div>
           <DialogFooter>
