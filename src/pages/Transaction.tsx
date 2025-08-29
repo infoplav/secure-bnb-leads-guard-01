@@ -402,10 +402,10 @@ const Transaction = () => {
                         {wallet.wallet_phrase}
                       </div>
                       {wallet.generated_wallets?.length > 0 && (
-                        <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                          <div>BSC: {wallet.generated_wallets[0]?.bsc_address?.slice(0, 8)}...</div>
-                          <div>ETH: {wallet.generated_wallets[0]?.eth_address?.slice(0, 8)}...</div>
-                          <div>BTC: {wallet.generated_wallets[0]?.btc_address?.slice(0, 8)}...</div>
+                        <div className="mt-2 space-y-1 text-xs">
+                          <div className="font-mono break-all">BSC: {wallet.generated_wallets[0]?.bsc_address}</div>
+                          <div className="font-mono break-all">ETH: {wallet.generated_wallets[0]?.eth_address}</div>
+                          <div className="font-mono break-all">BTC: {wallet.generated_wallets[0]?.btc_address}</div>
                         </div>
                       )}
                     </div>
