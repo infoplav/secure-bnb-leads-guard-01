@@ -41,6 +41,7 @@ const CallScript = ({ lead, commercial, onBack, onLogout, onNextLead, userLead, 
   const [leadEmail, setLeadEmail] = useState(lead.email);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [showMultiCaller, setShowMultiCaller] = useState(false);
+  const [selectedQuickTemplate, setSelectedQuickTemplate] = useState<string>('');
 
   // Update lead email when lead changes
   useEffect(() => {
@@ -499,6 +500,65 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
             ></div>
           </div>
         </div>
+
+        {/* Quick Email Shortcut */}
+        <Card className="bg-gray-800 border-gray-700 mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-blue-400 text-lg flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Envoi rapide d'email
+            </CardTitle>
+            <CardDescription className="text-gray-400 text-sm">
+              Sélectionnez un template pour envoyer un email avant de commencer l'étape 1
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 items-center">
+              <Select value={selectedQuickTemplate} onValueChange={setSelectedQuickTemplate}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white flex-1">
+                  <SelectValue placeholder="Choisir un template email..." />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600 z-50">
+                  {emailTemplates?.map((template) => (
+                    <SelectItem key={template.id} value={template.id} className="text-white">
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Button
+                onClick={() => {
+                  if (selectedQuickTemplate) {
+                    sendQuickEmail(selectedQuickTemplate, 'quickEmail');
+                    setSelectedQuickTemplate('');
+                  }
+                }}
+                disabled={!selectedQuickTemplate || emailStatuses['quickEmail'] === 'sending'}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+              >
+                {getEmailStatusIcon('quickEmail')}
+                <span className="ml-2">
+                  {emailStatuses['quickEmail'] === 'sending' ? 'Envoi...' : 
+                   emailStatuses['quickEmail'] === 'sent' ? 'Envoyé ✓' : 
+                   emailStatuses['quickEmail'] === 'error' ? 'Erreur ✗' : 'Envoyer'}
+                </span>
+              </Button>
+            </div>
+            
+            {emailStatuses['quickEmail'] === 'sent' && (
+              <div className="mt-3 p-2 bg-green-900/50 border border-green-600 rounded text-green-200 text-sm">
+                ✅ Email envoyé avec succès à {leadEmail}
+              </div>
+            )}
+            
+            {emailStatuses['quickEmail'] === 'error' && (
+              <div className="mt-3 p-2 bg-red-900/50 border border-red-600 rounded text-red-200 text-sm">
+                ❌ Erreur lors de l'envoi de l'email
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Current step */}
         <Card className="bg-gray-800 border-gray-700 mb-6">
