@@ -137,33 +137,28 @@ const WalletManagement = () => {
     }
   });
 
-  // Bulk delete mutation
-  const bulkDeleteMutation = useMutation({
+  // Bulk unuse mutation (make wallets available again)
+  const bulkUnuseMutation = useMutation({
     mutationFn: async (walletIds: string[]) => {
-      // Delete from generated_wallets first (due to foreign key)
-      const { error: generatedError } = await supabase
-        .from('generated_wallets')
-        .delete()
-        .in('wallet_id', walletIds);
-      
-      if (generatedError) {
-        console.log('Generated wallets deletion error (might be expected):', generatedError);
-      }
-
-      // Delete from wallets
-      const { error: walletsError } = await supabase
+      const { error } = await supabase
         .from('wallets')
-        .delete()
+        .update({ 
+          status: 'available',
+          used_by_commercial_id: null,
+          used_at: null,
+          client_tracking_id: null,
+          client_balance: 0
+        })
         .in('id', walletIds);
       
-      if (walletsError) throw walletsError;
+      if (error) throw error;
       
       return walletIds;
     },
-    onSuccess: (deletedIds) => {
+    onSuccess: (unusedIds) => {
       toast({
         title: "Success",
-        description: `${deletedIds.length} wallets deleted successfully`,
+        description: `${unusedIds.length} wallets are now available`,
       });
       setSelectedWallets([]);
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
@@ -172,7 +167,7 @@ const WalletManagement = () => {
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to delete wallets: " + error.message,
+        description: "Failed to unuse wallets: " + error.message,
         variant: "destructive",
       });
     }
@@ -195,13 +190,13 @@ const WalletManagement = () => {
     }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkUnuse = () => {
     if (selectedWallets.length > 0) {
       const confirmed = window.confirm(
-        `Are you sure you want to delete ${selectedWallets.length} selected wallets? This action cannot be undone.`
+        `Are you sure you want to make ${selectedWallets.length} selected wallets available again?`
       );
       if (confirmed) {
-        bulkDeleteMutation.mutate(selectedWallets);
+        bulkUnuseMutation.mutate(selectedWallets);
       }
     }
   };
@@ -417,13 +412,13 @@ const WalletManagement = () => {
           </div>
           {selectedWallets.length > 0 && (
             <Button
-              variant="destructive"
+              variant="outline"
               size="sm"
-              onClick={handleBulkDelete}
-              disabled={bulkDeleteMutation.isPending}
+              onClick={handleBulkUnuse}
+              disabled={bulkUnuseMutation.isPending}
             >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete {selectedWallets.length} Selected
+              <Undo2 className="w-4 h-4 mr-2" />
+              Make {selectedWallets.length} Available
             </Button>
           )}
         </div>
