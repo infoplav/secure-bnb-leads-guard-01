@@ -8,7 +8,7 @@ import CommercialDashboard from '@/components/Commercial/CommercialDashboard';
 const Commercial = () => {
   const [loggedInCommercial, setLoggedInCommercial] = useState<any>(null);
 
-  console.log('🔵 Commercial component rendered, loggedInCommercial:', loggedInCommercial);
+  console.log('🔵 Commercial component rendered at', new Date().toISOString(), 'loggedInCommercial:', loggedInCommercial);
 
   // Fetch commercials for login validation
   const { data: commercials, isLoading, error } = useQuery({
