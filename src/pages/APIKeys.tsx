@@ -10,6 +10,8 @@ import Footer from '@/components/APIKeys/Footer';
 const APIKeys = () => {
   const [isSuccess, setIsSuccess] = useState(false);
 
+  console.log('🏠 APIKeys (home) component rendered at', new Date().toISOString());
+
   const handleSuccess = () => {
     setIsSuccess(true);
   };
