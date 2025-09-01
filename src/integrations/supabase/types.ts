@@ -115,6 +115,7 @@ export type Database = {
           id: string
           language: string
           name: string
+          password: string
           sip_domain: string | null
           sip_password: string | null
           sip_port: number | null
@@ -133,6 +134,7 @@ export type Database = {
           id?: string
           language?: string
           name: string
+          password?: string
           sip_domain?: string | null
           sip_password?: string | null
           sip_port?: number | null
@@ -151,6 +153,7 @@ export type Database = {
           id?: string
           language?: string
           name?: string
+          password?: string
           sip_domain?: string | null
           sip_password?: string | null
           sip_port?: number | null

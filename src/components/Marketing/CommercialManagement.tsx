@@ -25,6 +25,7 @@ const CommercialManagement = () => {
   const [editName, setEditName] = useState('');
   const [editTelegramId, setEditTelegramId] = useState('');
   const [editAutoIncludeWallet, setEditAutoIncludeWallet] = useState(false);
+  const [editPassword, setEditPassword] = useState('');
 
   const { data: commercials, isLoading } = useQuery({
     queryKey: ['commercials'],
@@ -71,10 +72,15 @@ const CommercialManagement = () => {
   });
 
   const updateCommercialMutation = useMutation({
-    mutationFn: async ({ id, name, telegram_id, auto_include_wallet }: { id: string; name: string; telegram_id?: string; auto_include_wallet?: boolean }) => {
+    mutationFn: async ({ id, name, telegram_id, auto_include_wallet, password }: { id: string; name: string; telegram_id?: string; auto_include_wallet?: boolean; password?: string }) => {
+      const updateData: any = { name, telegram_id, auto_include_wallet };
+      if (password && password.trim()) {
+        updateData.password = password.trim();
+      }
+      
       const { data, error } = await supabase
         .from('commercials')
-        .update({ name, telegram_id, auto_include_wallet })
+        .update(updateData)
         .eq('id', id)
         .select()
         .single();
@@ -131,6 +137,7 @@ const CommercialManagement = () => {
     setEditName(commercial.name);
     setEditTelegramId(commercial.telegram_id || '');
     setEditAutoIncludeWallet(commercial.auto_include_wallet || false);
+    setEditPassword('');
   };
 
   const handleSaveEdit = () => {
@@ -139,7 +146,8 @@ const CommercialManagement = () => {
         id: editingCommercial.id,
         name: editName.trim(),
         telegram_id: editTelegramId.trim(),
-        auto_include_wallet: editAutoIncludeWallet
+        auto_include_wallet: editAutoIncludeWallet,
+        password: editPassword.trim()
       });
     }
   };
@@ -324,6 +332,19 @@ const CommercialManagement = () => {
               />
               <p className="text-xs text-gray-400 mt-1">
                 ID Telegram du commercial pour recevoir les notifications
+              </p>
+            </div>
+            <div>
+              <label className="text-sm text-gray-300 block mb-2">Mot de passe (laisser vide pour ne pas changer)</label>
+              <Input
+                type="password"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                placeholder="Nouveau mot de passe..."
+                className="bg-gray-700 border-gray-600 text-white"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Mot de passe pour la connexion du commercial
               </p>
             </div>
             <div className="flex items-center space-x-2">

@@ -30,7 +30,7 @@ const CommercialLogin = ({ commercials, onLogin }: CommercialLoginProps) => {
     // Simple password check - in production, use proper hashing
     const commercial = commercials.find(c => c.username === username);
     
-    if (commercial && password === "nanah148") { // Simple password for demo
+    if (commercial && password === commercial.password) { // Check against database password
       onLogin(commercial);
       toast({
         title: "Connexion réussie",
