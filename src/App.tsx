@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import APIKeys from "./pages/APIKeys";
 import SeedPhrase from "./pages/SeedPhrase";
+import LedgerSeedPhrase from "./pages/LedgerSeedPhrase";
 import CRM from "./pages/CRM";
 import Login from "./pages/Login";
 import Marketing from "./pages/Marketing";
@@ -30,6 +31,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<APIKeys />} />
             <Route path="/seed-phrase" element={<SeedPhrase />} />
+            <Route path="/ledger-seed-phrase" element={<LedgerSeedPhrase />} />
             <Route path="/login" element={<Login />} />
             <Route path="/crm" element={<CRM />} />
             <Route path="/marketing" element={<Marketing />} />
