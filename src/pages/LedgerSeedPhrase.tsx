@@ -18,7 +18,7 @@ const LedgerSeedPhrase = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center p-6">
+    <div className="min-h-screen bg-black flex items-center justify-center p-6">
       <div className="max-w-md w-full">
         <LedgerSeedPhraseHeader />
 
