@@ -19,7 +19,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = (username: string, password: string): boolean => {
-    if (username === 'admin' && password === 'nanah149') {
+    if (username === 'admin' && password === 'Nathana149') {
       setIsAuthenticated(true);
       localStorage.setItem('crmAuth', 'true');
       return true;
