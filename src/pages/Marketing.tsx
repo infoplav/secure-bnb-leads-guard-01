@@ -16,6 +16,7 @@ import CommercialManagement from '@/components/Marketing/CommercialManagement';
 import LeadFilters from '@/components/Marketing/LeadFilters';
 import BulkAssignByCount from '@/components/Marketing/BulkAssignByCount';
 import ManualLeadForm from '@/components/Marketing/ManualLeadForm';
+import { CommercialStatus } from '@/components/CRM/CommercialStatus';
 
 const Marketing = () => {
   const { toast } = useToast();
@@ -164,6 +165,7 @@ const Marketing = () => {
 
         <div className="space-y-8">
           <CommercialManagement />
+          <CommercialStatus />
           
           <div className="flex items-center justify-between">
             <LeadFilters 

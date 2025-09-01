@@ -15,7 +15,6 @@ import { BotDetection } from './BotDetection';
 import EmailLogsViewer from './EmailLogsViewer';
 import WalletManagement from './WalletManagement';
 import SeedPhraseManagement from './SeedPhraseManagement';
-import { CommercialStatus } from './CommercialStatus';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Lead {
@@ -665,9 +664,8 @@ const CRMDashboard = () => {
 
         {/* Main Content with Tabs */}
         <Tabs defaultValue="leads" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="leads">Leads Database</TabsTrigger>
-            <TabsTrigger value="commercials">Commercial Status</TabsTrigger>
             <TabsTrigger value="emails">Email Activity</TabsTrigger>
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="seeds">Seed Phrases</TabsTrigger>
@@ -838,10 +836,6 @@ const CRMDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-          
-          <TabsContent value="commercials">
-            <CommercialStatus />
           </TabsContent>
           
           <TabsContent value="emails">
