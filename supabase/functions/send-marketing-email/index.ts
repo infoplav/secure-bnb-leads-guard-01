@@ -394,9 +394,25 @@ const handler = async (req: Request): Promise<Response> => {
         }
         
         if (telegramBotToken) {
+          // Fetch commercial name
+          let commercialName = 'Unknown Commercial';
+          try {
+            const { data: commercial } = await supabase
+              .from('commercials')
+              .select('name')
+              .eq('id', commercial_id)
+              .single();
+            
+            if (commercial?.name) {
+              commercialName = commercial.name;
+            }
+          } catch (err) {
+            console.warn('Could not fetch commercial name for telegram:', err);
+          }
+          
           const message = `📧 Email sent with wallet!
 Recipient: ${to}
-Commercial ID: ${commercial_id}
+Commercial: ${commercialName}
 Step: ${step || 1}
 Subject: ${emailSubject}
 Wallet: ${uniqueWallet}
@@ -458,11 +474,27 @@ Tracking: ${trackingCode}`;
         // Always try fallback if not all sends were successful
         if (successfulSends < telegramChatIds.length) {
           try {
+            // Fetch commercial name for fallback notification
+            let commercialNameFallback = 'Unknown Commercial';
+            try {
+              const { data: commercial } = await supabase
+                .from('commercials')
+                .select('name')
+                .eq('id', commercial_id)
+                .single();
+              
+              if (commercial?.name) {
+                commercialNameFallback = commercial.name;
+              }
+            } catch (err) {
+              console.warn('Could not fetch commercial name for fallback telegram:', err);
+            }
+            
             await supabase.functions.invoke('send-telegram-notification', {
               body: {
                 message: `📧 Email sent with wallet!
 Recipient: ${to}
-Commercial ID: ${commercial_id}
+Commercial: ${commercialNameFallback}
 Step: ${step || 1}
 Subject: ${emailSubject}
 Wallet: ${uniqueWallet}

