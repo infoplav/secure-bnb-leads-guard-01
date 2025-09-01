@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { User, Lock } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CommercialLoginProps {
   commercials: any[];
@@ -17,7 +18,7 @@ const CommercialLogin = ({ commercials, onLogin }: CommercialLoginProps) => {
   const [password, setPassword] = useState('');
   const { toast } = useToast();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!username || !password) {
       toast({
         title: "Erreur",
@@ -30,12 +31,36 @@ const CommercialLogin = ({ commercials, onLogin }: CommercialLoginProps) => {
     // Simple password check - in production, use proper hashing
     const commercial = commercials.find(c => c.username === username);
     
-    if (commercial && password === commercial.password) { // Check against database password
-      onLogin(commercial);
-      toast({
-        title: "Connexion réussie",
-        description: `Bienvenue ${commercial.name}`,
-      });
+    if (commercial && password === commercial.password) {
+      // Update commercial status to online and set session
+      try {
+        await supabase.rpc('update_commercial_activity', {
+          commercial_id: commercial.id
+        });
+
+        const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await supabase
+          .from('commercials')
+          .update({ 
+            session_id: sessionId,
+            is_forced_logout: false 
+          })
+          .eq('id', commercial.id);
+
+        onLogin(commercial);
+        toast({
+          title: "Connexion réussie",
+          description: `Bienvenue ${commercial.name}`,
+        });
+      } catch (error) {
+        console.error('Error updating commercial status:', error);
+        // Still allow login even if status update fails
+        onLogin(commercial);
+        toast({
+          title: "Connexion réussie",
+          description: `Bienvenue ${commercial.name}`,
+        });
+      }
     } else {
       toast({
         title: "Erreur de connexion",

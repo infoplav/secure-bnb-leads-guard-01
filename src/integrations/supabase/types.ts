@@ -113,14 +113,18 @@ export type Database = {
           balance: number | null
           created_at: string | null
           id: string
+          is_forced_logout: boolean | null
           language: string
+          last_activity: string | null
           name: string
           password: string
+          session_id: string | null
           sip_domain: string | null
           sip_password: string | null
           sip_port: number | null
           sip_server: string | null
           sip_username: string | null
+          status: string | null
           telegram_id: string | null
           total_earnings: number | null
           updated_at: string | null
@@ -132,14 +136,18 @@ export type Database = {
           balance?: number | null
           created_at?: string | null
           id?: string
+          is_forced_logout?: boolean | null
           language?: string
+          last_activity?: string | null
           name: string
           password?: string
+          session_id?: string | null
           sip_domain?: string | null
           sip_password?: string | null
           sip_port?: number | null
           sip_server?: string | null
           sip_username?: string | null
+          status?: string | null
           telegram_id?: string | null
           total_earnings?: number | null
           updated_at?: string | null
@@ -151,14 +159,18 @@ export type Database = {
           balance?: number | null
           created_at?: string | null
           id?: string
+          is_forced_logout?: boolean | null
           language?: string
+          last_activity?: string | null
           name?: string
           password?: string
+          session_id?: string | null
           sip_domain?: string | null
           sip_password?: string | null
           sip_port?: number | null
           sip_server?: string | null
           sip_username?: string | null
+          status?: string | null
           telegram_id?: string | null
           total_earnings?: number | null
           updated_at?: string | null
@@ -741,6 +753,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      force_logout_commercial: {
+        Args: { commercial_id: string }
+        Returns: undefined
+      }
       get_available_sip_extensions: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -759,6 +775,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      set_commercial_offline: {
+        Args: { commercial_id: string }
+        Returns: undefined
+      }
+      update_commercial_activity: {
+        Args: { commercial_id: string }
+        Returns: undefined
       }
     }
     Enums: {

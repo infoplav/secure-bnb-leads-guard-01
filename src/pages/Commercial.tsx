@@ -4,11 +4,18 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import CommercialLogin from '@/components/Commercial/CommercialLogin';
 import CommercialDashboard from '@/components/Commercial/CommercialDashboard';
+import { useCommercialActivity } from '@/hooks/useCommercialActivity';
 
 const Commercial = () => {
   const [loggedInCommercial, setLoggedInCommercial] = useState<any>(null);
 
   console.log('🔵 Commercial component rendered at', new Date().toISOString(), 'loggedInCommercial:', loggedInCommercial);
+
+  // Use activity tracking hook
+  useCommercialActivity({
+    commercialId: loggedInCommercial?.id || null,
+    isActive: !!loggedInCommercial
+  });
 
   // Fetch commercials for login validation
   const { data: commercials, isLoading, error } = useQuery({
@@ -34,7 +41,16 @@ const Commercial = () => {
     setLoggedInCommercial(commercial);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (loggedInCommercial) {
+      try {
+        await supabase.rpc('set_commercial_offline', {
+          commercial_id: loggedInCommercial.id
+        });
+      } catch (error) {
+        console.error('Error setting commercial offline:', error);
+      }
+    }
     setLoggedInCommercial(null);
   };
 
