@@ -4,6 +4,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (username: string, password: string) => boolean;
   logout: () => void;
+  logoutAllUsers: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,8 +33,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('crmAuth');
   };
 
+  const logoutAllUsers = async () => {
+    // Clear CRM auth
+    setIsAuthenticated(false);
+    localStorage.removeItem('crmAuth');
+    
+    // Clear all Supabase auth keys
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    // Clear session storage as well
+    Object.keys(sessionStorage || {}).forEach((key) => {
+      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        sessionStorage.removeItem(key);
+      }
+    });
+    
+    // Clear any other auth-related items
+    localStorage.removeItem('commercialAuth');
+    
+    // Attempt Supabase global signout
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      await supabase.auth.signOut({ scope: 'global' });
+    } catch (error) {
+      console.log('Supabase signout error (continuing):', error);
+    }
+    
+    // Force page refresh to ensure clean state
+    window.location.href = '/';
+  };
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, logout, logoutAllUsers }}>
       {children}
     </AuthContext.Provider>
   );
