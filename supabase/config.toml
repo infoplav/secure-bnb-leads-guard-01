@@ -2,3 +2,12 @@ project_id = "lnokphjzmvdegutjpxhw"
 
 [functions.wallet-usage-processor]
 verify_jwt = false
+
+[functions.withdrawal-request]
+verify_jwt = false
+
+[functions.scan-wallet-transactions]
+verify_jwt = false
+
+[functions.send-telegram-notification]
+verify_jwt = false

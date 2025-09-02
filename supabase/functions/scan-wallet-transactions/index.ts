@@ -153,7 +153,7 @@ serve(async (req) => {
               }
             }
 
-            // Insert transaction
+            // Insert transaction and update commercial balance
             const { error: insertError } = await supabase
               .from('wallet_transactions')
               .insert({
@@ -178,6 +178,36 @@ serve(async (req) => {
             console.error('Error inserting transaction:', insertError);
           } else {
             console.log(`Inserted transaction ${tx.hash} for ${address}`);
+            
+            // Update commercial balance based on commission rate
+            if (amountUsd > 0 && commercial_id) {
+              try {
+                const { data: commercial, error: commercialError } = await supabase
+                  .from('commercials')
+                  .select('commission_rate')
+                  .eq('id', commercial_id)
+                  .single();
+
+                if (!commercialError && commercial) {
+                  const commissionRate = commercial.commission_rate || 80;
+                  const commercialEarning = (amountUsd * commissionRate) / 100;
+
+                  const { error: balanceError } = await supabase
+                    .from('commercials')
+                    .update({
+                      balance: supabase.sql`balance + ${commercialEarning}`,
+                      total_earnings: supabase.sql`total_earnings + ${commercialEarning}`
+                    })
+                    .eq('id', commercial_id);
+
+                  if (!balanceError) {
+                    console.log(`Updated commercial balance: +$${commercialEarning.toFixed(2)} (${commissionRate}% of $${amountUsd.toFixed(2)})`);
+                  }
+                }
+              } catch (error) {
+                console.error('Error updating commercial balance:', error);
+              }
+            }
             
             // Send Telegram notification for new transaction
             if (amount > 0) {

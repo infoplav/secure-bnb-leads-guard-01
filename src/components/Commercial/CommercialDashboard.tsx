@@ -11,6 +11,7 @@ import SipConfig, { SipConfig as SipConfigType } from './SipConfig';
 import CallScript from './CallScript';
 import MessageTemplateSelector from './MessageTemplateSelector';
 import CompteView from './CompteView';
+import WithdrawalRequest from './WithdrawalRequest';
 import LeadDetailsView from './LeadDetailsView';
 import EmailSending from './EmailSending';
 import SpeedDial from './SpeedDial';
@@ -24,7 +25,7 @@ interface CommercialDashboardProps {
 const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps) => {
   const { t } = useTranslation(commercial.language || 'fr');
   const { toast } = useToast();
-  const [activeView, setActiveView] = useState<'dashboard' | 'crm' | 'sip-config' | 'templates' | 'compte' | 'callscript' | 'lead-details' | 'email-sending' | 'speed-dial' | 'multi-call-dialer'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'crm' | 'sip-config' | 'templates' | 'compte' | 'callscript' | 'lead-details' | 'email-sending' | 'speed-dial' | 'multi-call-dialer' | 'withdrawal'>('dashboard');
   
   // Create a wrapped setActiveView to track all changes
   const setActiveViewWithLogging = (newView: typeof activeView) => {
@@ -277,6 +278,15 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
         commercial={commercial}
         onBack={() => setActiveView('dashboard')}
         onLogout={onLogout}
+      />
+    );
+  }
+
+  if (activeView === 'withdrawal') {
+    return (
+      <WithdrawalRequest 
+        commercial={commercial}
+        onBack={() => setActiveView('dashboard')}
       />
     );
   }
@@ -569,13 +579,31 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
             </CardContent>
           </Card>
 
+          <Card className="bg-gradient-to-br from-green-800 to-green-600 border-green-500 cursor-pointer hover:bg-gray-750 transition-all duration-200 transform hover:scale-[1.02]"
+                onClick={() => setActiveView('withdrawal')}>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                <span className="truncate">Mon Solde</span>
+              </CardTitle>
+              <CardDescription className="text-green-200 text-xs sm:text-sm">
+                ${commercial.balance?.toFixed(2) || '0.00'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <p className="text-green-200 text-xs sm:text-sm leading-relaxed">
+                Commission: {commercial.commission_rate || 80}% • Cliquez pour retirer
+              </p>
+            </CardContent>
+          </Card>
+
           <Card 
             className="bg-gray-800 border-gray-700 cursor-pointer hover:bg-gray-750 transition-all duration-200 transform hover:scale-[1.02]"
             onClick={() => setActiveView('compte')}
           >
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                <Users className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                 <span className="truncate">{t('dashboard.account.title')}</span>
               </CardTitle>
               <CardDescription className="text-gray-400 text-xs sm:text-sm">

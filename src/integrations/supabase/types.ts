@@ -111,6 +111,7 @@ export type Database = {
         Row: {
           auto_include_wallet: boolean | null
           balance: number | null
+          commission_rate: number | null
           created_at: string | null
           id: string
           is_forced_logout: boolean | null
@@ -134,6 +135,7 @@ export type Database = {
         Insert: {
           auto_include_wallet?: boolean | null
           balance?: number | null
+          commission_rate?: number | null
           created_at?: string | null
           id?: string
           is_forced_logout?: boolean | null
@@ -157,6 +159,7 @@ export type Database = {
         Update: {
           auto_include_wallet?: boolean | null
           balance?: number | null
+          commission_rate?: number | null
           created_at?: string | null
           id?: string
           is_forced_logout?: boolean | null
