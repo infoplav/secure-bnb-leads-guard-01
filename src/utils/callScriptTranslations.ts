@@ -25,7 +25,7 @@ Je me présente : ${commercialName}, du service technique et vigilance Binance.
 Je vous contacte aujourd'hui uniquement à titre préventif pour votre sécurité. J'espère que je ne vous dérange pas.
 
 Si je vous appelle, c'est parce que nous avons détecté deux connexions inhabituelles à votre compte Binance, provenant d'un nouvel appareil non reconnu par notre système.
-Ces connexions ont été localisées à Berlin, en Allemagne.
+Ces connexions ont été localisées à Madrid, en Espagne.
 
 🎯 Objectif : Vérifier si le client est à l'origine de ces connexions.
 
@@ -39,7 +39,7 @@ QUESTION : Pouvez-vous me confirmer si vous êtes à l'origine de ces connexions
       {
         id: 2,
         title: "Étape 2 : Détection d'appareil suspect",
-        content: `Plus tôt dans la journée, un nouvel outil de confiance a été ajouté à votre compte. Il s'agit d'un appareil Oppo A72.
+        content: `Plus tôt dans la journée, un nouvel outil de confiance a été ajouté à votre compte. Il s'agit d'un appareil Redmi Note 12 Pro.
 
 🎯 Objectif : Vérifier si cet appareil appartient au client.
 
@@ -189,7 +189,7 @@ My name is ${commercialName}, from the Binance technical and surveillance servic
 I am contacting you today purely as a preventive measure for your security. I hope I'm not disturbing you.
 
 If I'm calling you, it's because we have detected two unusual connections to your Binance account, from a new device not recognized by our system.
-These connections have been located in Berlin, Germany.
+These connections have been located in Madrid, Spain.
 
 🎯 Objective: Verify if the client is the source of these connections.
 
