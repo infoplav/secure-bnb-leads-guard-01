@@ -273,11 +273,18 @@ const Transaction = () => {
                 {getWalletAddress(transaction)}
               </TableCell>
               <TableCell>
-                <div className="flex items-center space-x-1">
-                  <span className="font-medium">{transaction.amount}</span>
-                  <span className="text-muted-foreground">
-                    {getNetworkSymbol(transaction.network, transaction.token_symbol)}
-                  </span>
+                <div className="flex flex-col space-y-1">
+                  <div className="flex items-center space-x-1">
+                    <span className="font-medium">{transaction.amount}</span>
+                    <span className="text-muted-foreground">
+                      {getNetworkSymbol(transaction.network, transaction.token_symbol)}
+                    </span>
+                  </div>
+                  {transaction.amount_usd && transaction.amount_usd > 0 && (
+                    <div className="text-sm text-green-600 font-medium">
+                      ~${transaction.amount_usd.toFixed(2)} USD
+                    </div>
+                  )}
                 </div>
               </TableCell>
               <TableCell>

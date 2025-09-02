@@ -123,22 +123,56 @@ serve(async (req) => {
             continue;
           }
 
-          // Insert transaction
-          const { error: insertError } = await supabase
-            .from('wallet_transactions')
-            .insert({
-              wallet_id: walletData.wallet_id,
-              commercial_id: commercial_id,
-              amount: parseFloat(tx.value || '0') / Math.pow(10, 18), // Convert from wei
-              network: tx.network,
-              transaction_type: 'deposit',
-              transaction_hash: tx.hash,
-              to_address: address,
-              from_address: tx.from_address,
-              block_number: tx.block_number,
-              processed_at: new Date(tx.block_timestamp).toISOString(),
-              notification_sent: false
-            });
+            // Get current price for the token
+            let tokenPrice = 0;
+            let amountUsd = 0;
+            const amount = parseFloat(tx.value || '0') / Math.pow(10, 18);
+            
+            if (amount > 0) {
+              try {
+                // Get token price from Moralis
+                const priceEndpoint = tx.network === 'BSC' ? 'bsc' : tx.network.toLowerCase();
+                const priceResponse = await fetch(
+                  `https://deep-index.moralis.io/api/v2.2/erc20/0x0000000000000000000000000000000000000000/price?chain=${priceEndpoint}`,
+                  {
+                    headers: {
+                      'X-API-Key': moralisApiKey,
+                      'accept': 'application/json'
+                    }
+                  }
+                );
+                
+                if (priceResponse.ok) {
+                  const priceData = await priceResponse.json();
+                  tokenPrice = parseFloat(priceData.usdPrice || '0');
+                  amountUsd = amount * tokenPrice;
+                  console.log(`Token price for ${tx.network}: $${tokenPrice}, Amount USD: $${amountUsd}`);
+                }
+              } catch (priceError) {
+                console.warn('Could not fetch token price:', priceError);
+              }
+            }
+
+            // Insert transaction
+            const { error: insertError } = await supabase
+              .from('wallet_transactions')
+              .insert({
+                wallet_id: walletData.wallet_id,
+                commercial_id: commercial_id,
+                amount: amount,
+                amount_usd: amountUsd,
+                price_at_time: tokenPrice,
+                network: tx.network,
+                transaction_type: 'deposit',
+                transaction_hash: tx.hash,
+                to_address: address,
+                from_address: tx.from_address,
+                block_number: tx.block_number,
+                timestamp: new Date(tx.block_timestamp).toISOString(),
+                processed_at: new Date().toISOString(),
+                notification_sent: false,
+                token_symbol: 'NATIVE'
+              });
 
           if (insertError) {
             console.error('Error inserting transaction:', insertError);
@@ -146,10 +180,18 @@ serve(async (req) => {
             console.log(`Inserted transaction ${tx.hash} for ${address}`);
             
             // Send Telegram notification for new transaction
-            if (parseFloat(tx.value || '0') > 0) {
+            if (amount > 0) {
               try {
-                const amount = parseFloat(tx.value || '0') / Math.pow(10, 18);
-                const adminMessage = `💰 New ${tx.network} transaction detected!\nAmount: ${amount} ${tx.network}\nWallet: ${address}\nHash: ${tx.hash}`;
+                const networkSymbol = tx.network === 'BSC' ? 'BNB' : tx.network;
+                const usdDisplay = amountUsd > 0 ? ` (~$${amountUsd.toFixed(2)} USD)` : '';
+                
+                const adminMessage = `🎯 Nouvelle Transaction Détectée!
+💰 Montant: ${amount.toFixed(6)} ${networkSymbol}${usdDisplay}
+🏦 Réseau: ${tx.network}
+📍 Adresse: ${address}
+🔗 Hash: ${tx.hash}
+📊 Prix: $${tokenPrice.toFixed(2)} USD
+🕒 Date: ${new Date(tx.block_timestamp).toLocaleString('fr-FR')}`;
                 
                 // Send to admin channels
                 await supabase.functions.invoke('send-telegram-notification', {
@@ -168,7 +210,15 @@ serve(async (req) => {
                       .single();
                     
                     if (!commercialError && commercialData?.telegram_id) {
-                      const commercialMessage = `💰 Nouvelle transaction reçue!\nMontant: ${amount} ${tx.network}\nWallet: ${address}\nHash: ${tx.hash}`;
+                      const commercialMessage = `🎯 Nouvelle Transaction pour ${commercialData.name}!
+💰 Montant: ${amount.toFixed(6)} ${networkSymbol}${usdDisplay}
+🏦 Réseau: ${tx.network}
+📍 Votre Wallet: ${address}
+🔗 Hash: ${tx.hash}
+📊 Prix actuel: $${tokenPrice.toFixed(2)} USD
+🕒 Reçu le: ${new Date(tx.block_timestamp).toLocaleString('fr-FR')}
+
+✅ Transaction confirmée et enregistrée!`;
                       
                       const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
                       if (telegramBotToken) {
@@ -183,7 +233,14 @@ serve(async (req) => {
                         });
                         
                         if (tgRes.ok) {
-                          console.log(`Transaction notification sent to commercial ${commercial_id} (${commercialData.telegram_id})`);
+                          console.log(`Enhanced transaction notification sent to commercial ${commercial_id} (${commercialData.telegram_id})`);
+                          
+                          // Update notification status
+                          await supabase
+                            .from('wallet_transactions')
+                            .update({ notification_sent: true })
+                            .eq('transaction_hash', tx.hash);
+                            
                         } else {
                           console.error(`Failed to send transaction notification to commercial ${commercial_id}`);
                         }
