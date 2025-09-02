@@ -12,6 +12,7 @@ import LedgerSeedPhrase from "./pages/LedgerSeedPhrase";
 import CRM from "./pages/CRM";
 import Login from "./pages/Login";
 import Marketing from "./pages/Marketing";
+import Lead from "./pages/Lead";
 import TemplateEditor from "./pages/TemplateEditor";
 import Commercial from "./pages/Commercial";
 import Dashboard from "./pages/Dashboard";
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/crm" element={<CRM />} />
             <Route path="/marketing" element={<Marketing />} />
+            <Route path="/lead" element={<Lead />} />
             <Route path="/editor" element={<TemplateEditor />} />
             <Route path="/commerciale" element={<Commercial />} />
             <Route path="/dashboard" element={<Dashboard />} />
