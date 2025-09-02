@@ -42,7 +42,24 @@ serve(async (req) => {
 
     for (const notification of notifications || []) {
       try {
-        const walletData = JSON.parse(notification.setting_value);
+        // Atomically claim the notification to avoid double-processing
+        const { data: deletedRows, error: deleteErr } = await supabase
+          .from('admin_settings')
+          .delete()
+          .eq('setting_key', notification.setting_key)
+          .select('*');
+
+        if (deleteErr) {
+          console.warn(`Skip notification ${notification.setting_key} due to delete error:`, deleteErr);
+          continue;
+        }
+        if (!deletedRows || deletedRows.length === 0) {
+          // Already claimed by another worker
+          continue;
+        }
+
+        const claimed = deletedRows[0];
+        const walletData = JSON.parse(claimed.setting_value);
         
         // Fetch commercial name
         let commercialName = 'Unknown Commercial';
@@ -52,10 +69,7 @@ serve(async (req) => {
             .select('name')
             .eq('id', walletData.commercial_id)
             .single();
-          
-          if (commercial?.name) {
-            commercialName = commercial.name;
-          }
+          if (commercial?.name) commercialName = commercial.name;
         } catch (err) {
           console.warn('Could not fetch commercial name:', err);
         }
@@ -106,12 +120,6 @@ serve(async (req) => {
             });
           }
         }
-
-        // Remove processed notification
-        await supabase
-          .from('admin_settings')
-          .delete()
-          .eq('setting_key', notification.setting_key);
 
         console.log(`Processed notification for wallet ${walletData.wallet_id}`);
 
