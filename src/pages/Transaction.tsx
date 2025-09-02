@@ -4,18 +4,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Download, Activity, RefreshCw, Eye, Wallet2, Clock } from "lucide-react";
+import { Search, Download, Activity, RefreshCw, Eye, Wallet2, Clock, Trash2, Play } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedNetwork, setSelectedNetwork] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoScan, setAutoScan] = useState(true);
   const queryClient = useQueryClient();
 
   // Auto refresh every 30 seconds if enabled
@@ -28,6 +30,17 @@ const Transaction = () => {
 
     return () => clearInterval(interval);
   }, [autoRefresh, queryClient]);
+
+  // Auto scan every 5 minutes if enabled
+  useEffect(() => {
+    if (!autoScan) return;
+    
+    const interval = setInterval(() => {
+      scanAllWalletsMutation.mutate();
+    }, 300000); // 5 minutes
+
+    return () => clearInterval(interval);
+  }, [autoScan]);
 
   // Fetch unified monitoring data with wallet groups and their transactions
   const { data: monitoringData, isLoading, refetch } = useQuery({
@@ -106,6 +119,77 @@ const Transaction = () => {
     onError: (error) => {
       toast.error("Failed to scan wallet");
       console.error('Scan error:', error);
+    }
+  });
+
+  // Scan all wallets mutation
+  const scanAllWalletsMutation = useMutation({
+    mutationFn: async () => {
+      if (!monitoringData?.walletGroups?.length) return;
+      
+      const scanPromises = monitoringData.walletGroups.map(group => 
+        supabase.functions.invoke('scan-wallet-transactions', {
+          body: {
+            wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
+            commercial_id: group.commercial_id
+          }
+        })
+      );
+      
+      await Promise.all(scanPromises);
+    },
+    onSuccess: () => {
+      toast.success("All wallets scan initiated");
+      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
+    },
+    onError: (error) => {
+      toast.error("Failed to scan all wallets");
+      console.error('Scan all error:', error);
+    }
+  });
+
+  // Delete wallet mutation
+  const deleteWalletMutation = useMutation({
+    mutationFn: async (walletGroup: any) => {
+      // Delete related transactions first
+      const { error: txError } = await supabase
+        .from('wallet_transactions')
+        .delete()
+        .eq('generated_wallet_id', walletGroup.id);
+
+      if (txError) throw txError;
+
+      // Delete the generated wallet
+      const { error: gwError } = await supabase
+        .from('generated_wallets')
+        .delete()
+        .eq('id', walletGroup.id);
+
+      if (gwError) throw gwError;
+
+      // If there's an associated wallet, set it back to available
+      if (walletGroup.wallet_id) {
+        const { error: walletError } = await supabase
+          .from('wallets')
+          .update({ 
+            status: 'available', 
+            used_by_commercial_id: null, 
+            used_at: null,
+            client_tracking_id: null,
+            client_balance: 0
+          })
+          .eq('id', walletGroup.wallet_id);
+
+        if (walletError) throw walletError;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Wallet deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
+    },
+    onError: (error) => {
+      toast.error("Failed to delete wallet");
+      console.error('Delete error:', error);
     }
   });
 
@@ -233,6 +317,16 @@ const Transaction = () => {
     return `${days}d ago`;
   };
 
+  const formatDateTime = (date: string) => {
+    return new Date(date).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -251,7 +345,23 @@ const Transaction = () => {
               onClick={() => setAutoRefresh(!autoRefresh)}
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
-              {autoRefresh ? 'Auto' : 'Manual'}
+              {autoRefresh ? 'Auto Refresh' : 'Manual Refresh'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAutoScan(!autoScan)}
+            >
+              <Play className={`w-4 h-4 mr-2 ${autoScan ? 'text-green-600' : ''}`} />
+              {autoScan ? 'Auto Scan ON' : 'Auto Scan OFF'}
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => scanAllWalletsMutation.mutate()}
+              disabled={scanAllWalletsMutation.isPending}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${scanAllWalletsMutation.isPending ? 'animate-spin' : ''}`} />
+              Scan All
             </Button>
             <Button variant="outline" onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" />
@@ -305,11 +415,9 @@ const Transaction = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Recent Activity</p>
-                  <p className="text-2xl font-bold">
-                    {monitoringData?.allTransactions?.filter(tx => 
-                      new Date(tx.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
-                    )?.length || 0}
+                  <p className="text-sm font-medium text-muted-foreground">Auto Scan Status</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {autoScan ? 'ON' : 'OFF'}
                   </p>
                 </div>
                 <Clock className="w-8 h-8 text-orange-600" />
@@ -373,7 +481,7 @@ const Transaction = () => {
                   Wallet Monitoring Dashboard
                 </CardTitle>
                 <CardDescription>
-                  Real-time monitoring of all generated wallets with transaction tracking
+                  Real-time monitoring of all generated wallets with transaction tracking. Auto-scan every 5 minutes: {autoScan ? 'Enabled' : 'Disabled'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -414,6 +522,9 @@ const Transaction = () => {
                                   Commercial: {group._commercial?.name || 'Unknown'} • 
                                   Balance: ${group._wallet?.client_balance || '0.00'}
                                 </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Created: {formatDateTime(group.created_at)}
+                                </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -432,6 +543,35 @@ const Transaction = () => {
                                 <RefreshCw className={`w-4 h-4 mr-2 ${scanWalletMutation.isPending ? 'animate-spin' : ''}`} />
                                 Scan
                               </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="sm">
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Wallet</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete this wallet? This will remove all associated transactions and cannot be undone.
+                                      <br /><br />
+                                      <strong>Wallet:</strong> {group._wallet?.client_tracking_id || `Wallet ${group.id.slice(0, 8)}`}
+                                      <br />
+                                      <strong>Commercial:</strong> {group._commercial?.name || 'Unknown'}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => deleteWalletMutation.mutate(group)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Delete Wallet
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </div>
                           </div>
 
