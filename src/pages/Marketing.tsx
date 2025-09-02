@@ -12,11 +12,10 @@ import { Link } from 'react-router-dom';
 import CRMLogin from '@/components/CRM/CRMLogin';
 import ContactsList from '@/components/Marketing/ContactsList';
 import CSVUpload from '@/components/Marketing/CSVUpload';
-import CommercialManagement from '@/components/Marketing/CommercialManagement';
+import CommercialManagementWithStatus from '@/components/Marketing/CommercialManagementWithStatus';
 import LeadFilters from '@/components/Marketing/LeadFilters';
 import BulkAssignByCount from '@/components/Marketing/BulkAssignByCount';
 import ManualLeadForm from '@/components/Marketing/ManualLeadForm';
-import { CommercialStatus } from '@/components/CRM/CommercialStatus';
 
 const Marketing = () => {
   const { toast } = useToast();
@@ -164,8 +163,7 @@ const Marketing = () => {
         </div>
 
         <div className="space-y-8">
-          <CommercialManagement />
-          <CommercialStatus />
+          <CommercialManagementWithStatus />
           
           <div className="flex items-center justify-between">
             <LeadFilters 
