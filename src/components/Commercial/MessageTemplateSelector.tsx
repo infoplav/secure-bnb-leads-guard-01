@@ -290,7 +290,7 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
                 <SelectContent className="bg-gray-700 border-gray-600">
                   {emailTemplates?.map((template) => (
                     <SelectItem key={template.id} value={template.id} className="text-white">
-                      {template.name}
+                      {template.subject}
                     </SelectItem>
                   ))}
                 </SelectContent>
