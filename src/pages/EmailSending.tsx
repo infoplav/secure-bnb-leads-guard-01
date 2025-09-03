@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Mail, Search, Calendar, Filter, ArrowLeft } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 
@@ -36,15 +35,7 @@ const EmailSending = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [commercialFilter, setCommercialFilter] = useState('all');
-  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
-
-  // Check if user is authenticated, redirect to login if not
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-    }
-  }, [isAuthenticated, navigate]);
 
   // Fetch email logs with commercial information
   const { data: emailLogs = [], isLoading, error } = useQuery<EmailLog[]>({
@@ -78,7 +69,6 @@ const EmailSending = () => {
       if (error) throw error;
       return data || [];
     },
-    enabled: isAuthenticated,
   });
 
   // Fetch commercials for filter dropdown
@@ -92,7 +82,6 @@ const EmailSending = () => {
       if (error) throw error;
       return data;
     },
-    enabled: isAuthenticated,
   });
 
   const getStatusBadge = (status: string, openCount: number, bounceCount: number) => {
@@ -125,10 +114,6 @@ const EmailSending = () => {
   const deliveryRate = totalEmails > 0 ? ((deliveredEmails / totalEmails) * 100).toFixed(1) : '0';
   const openRate = deliveredEmails > 0 ? ((openedEmails / deliveredEmails) * 100).toFixed(1) : '0';
   const bounceRate = totalEmails > 0 ? ((bouncedEmails / totalEmails) * 100).toFixed(1) : '0';
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <div className="container mx-auto px-4 py-8">
