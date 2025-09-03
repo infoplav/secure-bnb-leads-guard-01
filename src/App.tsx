@@ -17,6 +17,7 @@ import TemplateEditor from "./pages/TemplateEditor";
 import Commercial from "./pages/Commercial";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import EmailSending from "./pages/EmailSending";
 import Transaction from "./pages/Transaction";
 import NotFound from "./pages/NotFound";
 
@@ -41,6 +42,11 @@ const App = () => (
             <Route path="/pro" element={<Commercial />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/email-sending" element={
+              <ProtectedRoute>
+                <EmailSending />
+              </ProtectedRoute>
+            } />
             <Route path="/transaction" element={<Transaction />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
