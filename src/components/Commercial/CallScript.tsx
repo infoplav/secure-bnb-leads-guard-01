@@ -521,7 +521,7 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
                 <SelectContent className="bg-gray-700 border-gray-600 z-50">
                   {emailTemplates?.map((template) => (
                     <SelectItem key={template.id} value={template.id} className="text-white">
-                      {template.name}
+                      {template.subject}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -664,9 +664,9 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
                       <SelectValue placeholder="Sélectionner un template email" />
                     </SelectTrigger>
                     <SelectContent className="bg-gray-700 border-gray-600">
-                      {emailTemplates.map((template) => (
+                       {emailTemplates.map((template) => (
                         <SelectItem key={template.id} value={template.id} className="text-white">
-                          {template.name}
+                          {template.subject}
                         </SelectItem>
                       ))}
                     </SelectContent>
