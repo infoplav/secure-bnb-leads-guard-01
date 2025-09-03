@@ -40,12 +40,15 @@ const ContactsList = ({ contacts, isLoading }: ContactsListProps) => {
 
   const deleteContactsMutation = useMutation({
     mutationFn: async (contactIds: string[]) => {
-      const { error } = await supabase
-        .from('marketing_contacts')
-        .delete()
-        .in('id', contactIds);
-      
-      if (error) throw error;
+      const chunkSize = 50;
+      for (let i = 0; i < contactIds.length; i += chunkSize) {
+        const chunk = contactIds.slice(i, i + chunkSize);
+        const { error } = await supabase
+          .from('marketing_contacts')
+          .delete()
+          .in('id', chunk);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['marketing-contacts'] });

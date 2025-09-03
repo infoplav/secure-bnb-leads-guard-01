@@ -22,14 +22,18 @@ const BulkReassign = ({ selectedContacts, onComplete }: BulkReassignProps) => {
 
   const bulkReassignMutation = useMutation({
     mutationFn: async (commercialId: string) => {
-      const { error } = await supabase
-        .from('marketing_contacts')
-        .update({ 
-          commercial_id: commercialId === 'unassigned' ? null : commercialId 
-        })
-        .in('id', selectedContacts);
-      
-      if (error) throw error;
+      const chunkSize = 50;
+      const payload = { 
+        commercial_id: commercialId === 'unassigned' ? null : commercialId 
+      };
+      for (let i = 0; i < selectedContacts.length; i += chunkSize) {
+        const chunk = selectedContacts.slice(i, i + chunkSize);
+        const { error } = await supabase
+          .from('marketing_contacts')
+          .update(payload)
+          .in('id', chunk);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['marketing-contacts'] });
