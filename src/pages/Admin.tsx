@@ -224,13 +224,20 @@ const Admin = () => {
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <p className="text-muted-foreground">Gestion des commerciaux et suivi des performances</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Nouveau Commercial
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-3">
+          <Button 
+            onClick={() => window.location.href = '/email-sending'}
+            variant="outline"
+          >
+            📧 Logs Email
+          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Nouveau Commercial
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Créer un nouveau commercial</DialogTitle>
@@ -266,7 +273,8 @@ const Admin = () => {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
+           </Dialog>
+        </div>
       </div>
 
       {/* Statistics Cards */}
