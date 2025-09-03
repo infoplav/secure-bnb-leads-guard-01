@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,6 +36,31 @@ const EmailSending = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [commercialFilter, setCommercialFilter] = useState('all');
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Set up real-time subscription for email_logs
+  useEffect(() => {
+    const channel = supabase
+      .channel('email-logs-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'email_logs'
+        },
+        (payload) => {
+          console.log('Email log update:', payload);
+          // Invalidate and refetch the email logs query
+          queryClient.invalidateQueries({ queryKey: ['email-logs'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Fetch email logs with commercial information
   const { data: emailLogs = [], isLoading, error } = useQuery<EmailLog[]>({
