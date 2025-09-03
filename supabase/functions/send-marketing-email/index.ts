@@ -52,7 +52,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
     // Fetch the current server IP from the database
@@ -518,22 +518,24 @@ Tracking: ${trackingCode}`
       }
     }
 
-    // Log to database in background (non-blocking)
-    EdgeRuntime.waitUntil(
-      supabase.from('email_logs').insert({
-        tracking_code: trackingCode,
-        recipient_email: to,
-        recipient_name: name,
-        contact_id: contact_id,
-        user_id: user_id,
-        template_id: template_id,
-        subject: emailSubject,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        resend_id: emailResponse.data?.id,
-        commercial_id: commercial_id
-      })
-    );
+    // Log to database immediately to ensure visibility
+    const { error: insertError } = await supabase.from('email_logs').insert({
+      tracking_code: trackingCode,
+      recipient_email: to,
+      recipient_name: name,
+      contact_id: contact_id,
+      user_id: user_id,
+      template_id: template_id,
+      subject: emailSubject,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      resend_id: emailResponse.data?.id,
+      commercial_id: commercial_id
+    });
+
+    if (insertError) {
+      console.error('Failed to insert email log:', insertError);
+    }
 
     return new Response(JSON.stringify({
       success: true,
