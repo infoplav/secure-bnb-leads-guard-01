@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Edit, Trash2, Plus, Users, TrendingUp, DollarSign, Target, Calendar } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const Admin = () => {
   const [editingCommercial, setEditingCommercial] = useState<any>(null);
@@ -225,12 +226,13 @@ const Admin = () => {
           <p className="text-muted-foreground">Gestion des commerciaux et suivi des performances</p>
         </div>
         <div className="flex gap-3">
-          <Button 
-            onClick={() => window.location.href = '/email-sending'}
-            variant="outline"
-          >
-            📧 Logs Email
-          </Button>
+          <Link to="/email-sending">
+            <Button 
+              variant="outline"
+            >
+              📧 Logs Email
+            </Button>
+          </Link>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button>
