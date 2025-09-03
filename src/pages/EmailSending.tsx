@@ -77,6 +77,15 @@ const EmailSending = () => {
         `)
         .order('sent_at', { ascending: false });
 
+      // Filter for today's emails by default
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      
+      query = query
+        .gte('sent_at', startOfDay.toISOString())
+        .lt('sent_at', endOfDay.toISOString());
+
       // Apply filters
       if (searchTerm) {
         query = query.or(`recipient_email.ilike.%${searchTerm}%,subject.ilike.%${searchTerm}%,tracking_code.ilike.%${searchTerm}%`);
@@ -90,7 +99,7 @@ const EmailSending = () => {
         query = query.eq('commercial_id', commercialFilter);
       }
 
-      const { data, error } = await query.limit(500);
+      const { data, error } = await query.limit(1000); // Increased limit for today's emails
       if (error) throw error;
       return data || [];
     },
@@ -151,9 +160,9 @@ const EmailSending = () => {
           <div>
             <h1 className="text-3xl font-bold flex items-center">
               <Mail className="w-8 h-8 mr-3" />
-              Email Campaign Analytics
+              Email Campaign Analytics - Today's Emails
             </h1>
-            <p className="text-muted-foreground">Monitor email delivery, opens, and bounces</p>
+            <p className="text-muted-foreground">Monitor email delivery, opens, and bounces for {format(new Date(), 'dd/MM/yyyy')}</p>
           </div>
         </div>
       </div>
@@ -255,7 +264,7 @@ const EmailSending = () => {
             </div>
           ) : emailLogs.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No email logs found matching your criteria.
+              No emails sent today matching your criteria. Today is {format(new Date(), 'dd/MM/yyyy')}.
             </div>
           ) : (
             <div className="overflow-x-auto">
