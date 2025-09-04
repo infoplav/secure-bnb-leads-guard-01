@@ -138,6 +138,11 @@ const ContactsList = ({ contacts, isLoading }: ContactsListProps) => {
     }
   };
 
+  const handleSelectBulk = (count: number) => {
+    const contactsToSelect = contacts.slice(0, Math.min(count, contacts.length));
+    setSelectedContacts(contactsToSelect.map(contact => contact.id));
+  };
+
   const handleSelectContact = (contactId: string) => {
     setSelectedContacts(prev => 
       prev.includes(contactId)
@@ -182,33 +187,50 @@ const ContactsList = ({ contacts, isLoading }: ContactsListProps) => {
             <User className="h-5 w-5" />
             Contacts ({contacts.length})
           </div>
-          {contacts.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={selectedContacts.length === contacts.length}
-                onCheckedChange={handleSelectAll}
-                className="border-gray-400"
-              />
-              <span className="text-sm text-gray-400">Select All</span>
-              {selectedContacts.length > 0 && (
-                <div className="flex gap-2">
-                  <BulkReassign 
-                    selectedContacts={selectedContacts}
-                    onComplete={handleBulkReassignComplete}
-                  />
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={handleDeleteSelected}
-                    disabled={deleteContactsMutation.isPending}
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete ({selectedContacts.length})
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+           {contacts.length > 0 && (
+             <div className="flex items-center gap-2">
+               <Checkbox
+                 checked={selectedContacts.length === contacts.length}
+                 onCheckedChange={handleSelectAll}
+                 className="border-gray-400"
+               />
+               <span className="text-sm text-gray-400">Select All</span>
+               
+               {/* Bulk selection buttons */}
+               <div className="flex gap-1 ml-2">
+                 {[50, 100, 500].map((count) => (
+                   <Button
+                     key={count}
+                     size="sm"
+                     variant="outline"
+                     onClick={() => handleSelectBulk(count)}
+                     disabled={contacts.length === 0}
+                     className="h-6 px-2 text-xs border-gray-600 text-gray-300 hover:bg-gray-600"
+                   >
+                     {Math.min(count, contacts.length)}
+                   </Button>
+                 ))}
+               </div>
+               
+               {selectedContacts.length > 0 && (
+                 <div className="flex gap-2">
+                   <BulkReassign 
+                     selectedContacts={selectedContacts}
+                     onComplete={handleBulkReassignComplete}
+                   />
+                   <Button
+                     size="sm"
+                     variant="destructive"
+                     onClick={handleDeleteSelected}
+                     disabled={deleteContactsMutation.isPending}
+                   >
+                     <Trash2 className="h-4 w-4 mr-1" />
+                     Delete ({selectedContacts.length})
+                   </Button>
+                 </div>
+               )}
+             </div>
+           )}
         </CardTitle>
       </CardHeader>
       <CardContent>
