@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Phone, User, Edit2, Check, X, Mail, UserPlus, Send, PhoneOff } from 'lucide-react';
+import { Phone, User, Edit2, Check, X, Mail, UserPlus, Send, PhoneOff, Mic, MicOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
@@ -32,6 +32,7 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
   const [editEmailValue, setEditEmailValue] = useState(lead.email);
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('');
   const [callState, setCallState] = useState<string>('idle');
+  const [isMuted, setIsMuted] = useState(false);
   const sipClientRef = useRef<any>(null);
   
   // Fetch email templates
@@ -50,12 +51,21 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
 
   // WebRTC SIP Client Class
   class RealSIPClient {
-    constructor(private onStateChange?: (state: string) => void) {}
+    private peerConnection: RTCPeerConnection | null = null;
+    private localStream: MediaStream | null = null;
+    private remoteAudio: HTMLAudioElement | null = null;
+
+    constructor(private onStateChange?: (state: string) => void) {
+      this.remoteAudio = new Audio();
+      this.remoteAudio.autoplay = true;
+    }
 
     async connect() {
       try {
         this.onStateChange?.('connecting');
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        
+        // Get user media (microphone)
+        this.localStream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
             sampleRate: 8000,
             channelCount: 1,
@@ -64,9 +74,44 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
             autoGainControl: true
           }
         });
+
+        // Create RTCPeerConnection
+        this.peerConnection = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        });
+
+        // Add local stream to peer connection
+        this.localStream.getTracks().forEach(track => {
+          this.peerConnection?.addTrack(track, this.localStream!);
+        });
+
+        // Handle remote stream
+        this.peerConnection.ontrack = (event) => {
+          console.log('📡 Received remote stream');
+          if (this.remoteAudio && event.streams[0]) {
+            this.remoteAudio.srcObject = event.streams[0];
+          }
+        };
+
+        // Handle ICE connection state
+        this.peerConnection.oniceconnectionstatechange = () => {
+          const state = this.peerConnection?.iceConnectionState;
+          console.log('🧊 ICE connection state:', state);
+          
+          if (state === 'connected' || state === 'completed') {
+            this.onStateChange?.('connected');
+          } else if (state === 'disconnected' || state === 'failed') {
+            this.onStateChange?.('failed');
+          }
+        };
+
         this.onStateChange?.('registered');
-        return stream;
+        return this.localStream;
       } catch (error) {
+        console.error('❌ WebRTC connection failed:', error);
         this.onStateChange?.('failed');
         throw error;
       }
@@ -74,30 +119,82 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
 
     async call(phoneNumber: string) {
       try {
+        if (!this.peerConnection) {
+          throw new Error('Peer connection not established');
+        }
+
         this.onStateChange?.('ringing');
         
+        // Create offer
+        const offer = await this.peerConnection.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false
+        });
+        
+        await this.peerConnection.setLocalDescription(offer);
+
+        // Send offer to edge function
         const { data, error } = await supabase.functions.invoke('webrtc-calling', {
           body: {
+            action: 'call',
             phoneNumber: phoneNumber,
-            action: 'call'
+            offer: {
+              type: offer.type,
+              sdp: offer.sdp
+            },
+            userId: `user-${Date.now()}`,
+            callId: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
           }
         });
 
         if (error) throw error;
-        
-        this.onStateChange?.('connected');
-        return data;
+
+        if (data.success && data.answer) {
+          // Set remote description
+          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+          console.log('✅ WebRTC call established');
+          this.onStateChange?.('connected');
+          return data;
+        } else {
+          throw new Error(data.error || 'Call failed');
+        }
       } catch (error) {
+        console.error('❌ Call failed:', error);
         this.onStateChange?.('failed');
         throw error;
       }
     }
 
+    mute(muted: boolean) {
+      if (this.localStream) {
+        this.localStream.getAudioTracks().forEach(track => {
+          track.enabled = !muted;
+        });
+      }
+    }
+
     hangup() {
       try {
+        // Send hangup to edge function
         supabase.functions.invoke('webrtc-calling', {
           body: { action: 'hangup' }
         });
+
+        // Clean up local resources
+        if (this.localStream) {
+          this.localStream.getTracks().forEach(track => track.stop());
+          this.localStream = null;
+        }
+
+        if (this.peerConnection) {
+          this.peerConnection.close();
+          this.peerConnection = null;
+        }
+
+        if (this.remoteAudio) {
+          this.remoteAudio.srcObject = null;
+        }
+
         this.onStateChange?.('ended');
       } catch (error) {
         console.error('Hangup error:', error);
@@ -338,6 +435,18 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
     }
   };
 
+  const toggleMute = () => {
+    if (sipClientRef.current) {
+      const newMutedState = !isMuted;
+      sipClientRef.current.mute(newMutedState);
+      setIsMuted(newMutedState);
+      toast({
+        title: newMutedState ? "Micro coupé" : "Micro activé",
+        description: newMutedState ? "Votre micro est maintenant coupé" : "Votre micro est maintenant activé"
+      });
+    }
+  };
+
   const getCallButtonText = () => {
     switch (callState) {
       case 'connecting': return 'Connexion...';
@@ -502,15 +611,29 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
           </div>
 
           {/* WebRTC Call Button */}
-          <Button
-            size="sm"
-            className={`w-full ${getCallButtonClass()}`}
-            onClick={handleWebRTCCall}
-            disabled={callState === 'connecting'}
-          >
-            {getCallButtonIcon()}
-            {getCallButtonText()}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              className={`flex-1 ${getCallButtonClass()}`}
+              onClick={handleWebRTCCall}
+              disabled={callState === 'connecting'}
+            >
+              {getCallButtonIcon()}
+              {getCallButtonText()}
+            </Button>
+            
+            {/* Mute button - only show when connected */}
+            {callState === 'connected' && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:bg-gray-700 px-3"
+                onClick={toggleMute}
+              >
+                {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
