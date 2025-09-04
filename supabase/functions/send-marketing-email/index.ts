@@ -48,9 +48,8 @@ const handler = async (req: Request): Promise<Response> => {
     if (leadId && templateId && commercialId) {
       console.log('Processing CRM format request:', { leadId, templateId, commercialId });
       
-      // Fetch lead data
       const { data: leadData, error: leadError } = await supabase
-        .from('leads')
+        .from('marketing_contacts')
         .select('id, name, first_name, email, phone, status')
         .eq('id', leadId)
         .single();
@@ -63,15 +62,37 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
       
-      // Fetch template data
-      const { data: templateData, error: templateError } = await supabase
-        .from('email_templates')
-        .select('id, name, subject, content')
-        .eq('id', templateId)
-        .single();
-        
+      // Fetch template data (by id or by name fallback)
+      let templateData: any = null;
+      let templateError: any = null;
+      try {
+        const byId = await supabase
+          .from('email_templates')
+          .select('id, name, subject, content')
+          .eq('id', templateId)
+          .single();
+        templateData = byId.data;
+        templateError = byId.error;
+      } catch (e) {
+        templateError = e;
+      }
+
       if (templateError || !templateData) {
-        console.error('Template not found:', templateError);
+        try {
+          const byName = await supabase
+            .from('email_templates')
+            .select('id, name, subject, content')
+            .eq('name', templateId)
+            .single();
+          templateData = byName.data;
+          templateError = byName.error;
+        } catch (e) {
+          templateError = e;
+        }
+      }
+      
+      if (templateError || !templateData) {
+        console.error('Template not found by id or name:', templateError);
         return new Response(
           JSON.stringify({ error: 'Template not found' }),
           { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
@@ -88,10 +109,21 @@ const handler = async (req: Request): Promise<Response> => {
       subject = templateData.subject;
       content = templateData.content;
       commercial_id = commercialId;
-      step = 1; // Default step for CRM emails
-      domain = 'domain1'; // Default domain
+      domain = domain || 'domain1'; // Default domain if not provided
+      // Derive step from template name if not provided (Email1, Email2, Email3)
+      if (!step && (templateData as any)?.name) {
+        const m = String((templateData as any).name).match(/(\d+)/);
+        if (m) {
+          const parsed = parseInt(m[1], 10);
+          if (!isNaN(parsed)) step = parsed;
+        } else {
+          step = 1;
+        }
+      } else if (!step) {
+        step = 1;
+      }
       
-      console.log('Mapped CRM data:', { to, name, first_name, user_id, contact_id, template_id, commercial_id });
+      console.log('Mapped CRM data:', { to, name, first_name, user_id, contact_id, template_id, commercial_id, step, domain });
     }
     
     console.log('Email request received:', { to, name, first_name, user_id, contact_id, template_id, commercial_id, domain, step });
