@@ -11,10 +11,10 @@ const corsHeaders = {
 };
 
 interface EmailRequest {
-  to: string;
-  name: string;
-  first_name: string;
-  user_id: string;
+  to?: string;
+  name?: string;
+  first_name?: string;
+  user_id?: string;
   contact_id?: string;
   template_id?: string;
   subject?: string;
@@ -23,6 +23,10 @@ interface EmailRequest {
   domain?: string;
   wallet?: string;
   step?: number;
+  // New format from CRM
+  leadId?: string;
+  templateId?: string;
+  commercialId?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -31,9 +35,75 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { to, name, first_name, user_id, contact_id, template_id, subject, content, commercial_id, domain, wallet, step }: EmailRequest = await req.json();
+    const requestBody = await req.json();
+    let { to, name, first_name, user_id, contact_id, template_id, subject, content, commercial_id, domain, wallet, step, leadId, templateId, commercialId } = requestBody;
+    
+    // Initialize Supabase client
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    // Handle new format from CRM (leadId, templateId, commercialId)
+    if (leadId && templateId && commercialId) {
+      console.log('Processing CRM format request:', { leadId, templateId, commercialId });
+      
+      // Fetch lead data
+      const { data: leadData, error: leadError } = await supabase
+        .from('leads')
+        .select('id, name, first_name, email, phone, status')
+        .eq('id', leadId)
+        .single();
+        
+      if (leadError || !leadData) {
+        console.error('Lead not found:', leadError);
+        return new Response(
+          JSON.stringify({ error: 'Lead not found' }),
+          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
+      }
+      
+      // Fetch template data
+      const { data: templateData, error: templateError } = await supabase
+        .from('email_templates')
+        .select('id, name, subject, content')
+        .eq('id', templateId)
+        .single();
+        
+      if (templateError || !templateData) {
+        console.error('Template not found:', templateError);
+        return new Response(
+          JSON.stringify({ error: 'Template not found' }),
+          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
+      }
+      
+      // Map the data to the expected format
+      to = leadData.email;
+      name = leadData.name || '';
+      first_name = leadData.first_name || '';
+      user_id = leadData.id; // Use lead ID as user_id for tracking
+      contact_id = leadData.id;
+      template_id = templateData.id;
+      subject = templateData.subject;
+      content = templateData.content;
+      commercial_id = commercialId;
+      step = 1; // Default step for CRM emails
+      domain = 'domain1'; // Default domain
+      
+      console.log('Mapped CRM data:', { to, name, first_name, user_id, contact_id, template_id, commercial_id });
+    }
     
     console.log('Email request received:', { to, name, first_name, user_id, contact_id, template_id, commercial_id, domain, step });
+
+    // Validate required fields
+    if (!to || !name || !commercial_id) {
+      console.error('Missing required fields:', { to, name, commercial_id });
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields: to, name, or commercial_id' }),
+        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
 
     // Select API key and domain based on user choice
     let apiKey = Deno.env.get("RESEND_API_KEY"); // Default domain 1
@@ -48,12 +118,6 @@ const handler = async (req: Request): Promise<Response> => {
     resend = new Resend(apiKey);
     
     console.log('Using domain:', fromDomain);
-
-    // Initialize Supabase client
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
 
     // Fetch the current server IP from the database
     const { data: serverConfig, error: configError } = await supabase
