@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Phone, User, MessageSquare, PhoneCall, Edit2, Check, X, Mail, UserPlus } from 'lucide-react';
+import { Phone, User, Edit2, Check, X, Mail, UserPlus, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import WebRTCDialer from './WebRTCDialer';
 
 interface Lead {
   id: string;
@@ -22,15 +24,30 @@ interface LeadCardProps {
   lead: Lead;
   commercial: any;
   isUnassigned?: boolean;
-  onTemplatesOpen: (lead: Lead) => void;
-  onCallScriptOpen?: (lead: Lead) => void;
   onUpdate: () => void;
 }
 
-const LeadCard = ({ lead, commercial, isUnassigned = false, onTemplatesOpen, onCallScriptOpen, onUpdate }: LeadCardProps) => {
+const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCardProps) => {
   const { toast } = useToast();
   const [editingEmail, setEditingEmail] = useState(false);
   const [editEmailValue, setEditEmailValue] = useState(lead.email);
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('');
+  const [isWebRTCOpen, setIsWebRTCOpen] = useState(false);
+  const [callState, setCallState] = useState<string>('idle');
+  
+  // Fetch email templates
+  const { data: emailTemplates } = useQuery({
+    queryKey: ['email-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('email_templates')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const updateLeadStatus = async (newStatus: string) => {
     try {
@@ -162,6 +179,50 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onTemplatesOpen, onC
     updateLeadEmail(trimmedEmail);
   };
 
+  const handleEmailTemplateSend = async (templateId: string) => {
+    try {
+      const template = emailTemplates?.find(t => t.id === templateId);
+      if (!template) {
+        toast({
+          title: "Erreur",
+          description: "Template non trouvé",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Send email using the marketing email function
+      const { error } = await supabase.functions.invoke('send-marketing-email', {
+        body: {
+          leadId: lead.id,
+          templateId: templateId,
+          commercialId: commercial.id
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Email envoyé",
+        description: `Email "${template.subject}" envoyé à ${lead.first_name} ${lead.name}`
+      });
+
+      // Update lead status to indicate contact was made
+      if (lead.status === 'new') {
+        updateLeadStatus('callback');
+      }
+
+      setSelectedEmailTemplate('');
+    } catch (error) {
+      console.error('Error sending email:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'envoyer l'email",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <Card className={`bg-gray-800 border-gray-700 ${isUnassigned ? 'border-l-4 border-l-blue-500' : ''}`}>
       <CardHeader>
@@ -270,47 +331,71 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onTemplatesOpen, onC
             </Button>
           )}
           
-          {onCallScriptOpen ? (
-            <div className="grid grid-cols-2 gap-2">
+          {/* Email Templates Dropdown */}
+          <div className="space-y-2">
+            <label className="text-xs text-gray-400">Envoyer Email:</label>
+            <div className="flex gap-2">
+              <Select value={selectedEmailTemplate} onValueChange={setSelectedEmailTemplate}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white h-8 flex-1">
+                  <SelectValue placeholder="Choisir un template..." />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600 max-h-60">
+                  {emailTemplates?.map((template) => (
+                    <SelectItem key={template.id} value={template.id} className="text-white">
+                      {template.subject}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 size="sm"
-                onClick={() => onCallScriptOpen(lead)}
-                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => selectedEmailTemplate && handleEmailTemplateSend(selectedEmailTemplate)}
+                disabled={!selectedEmailTemplate}
+                className="bg-purple-600 hover:bg-purple-700 px-3 h-8"
               >
-                <PhoneCall className="h-4 w-4 mr-1" />
-                Script
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => onTemplatesOpen(lead)}
-                variant="outline"
-                className="border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
-              >
-                <MessageSquare className="h-4 w-4 mr-1" />
-                Templates
+                <Send className="h-4 w-4" />
               </Button>
             </div>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => onTemplatesOpen(lead)}
-              className="w-full bg-purple-600 hover:bg-purple-700"
-            >
-              <MessageSquare className="h-4 w-4 mr-1" />
-              Templates
-            </Button>
-          )}
+          </div>
 
-          
+          {/* WebRTC Call Button */}
           <Button
             size="sm"
             className="w-full bg-green-600 hover:bg-green-700"
-            onClick={() => window.open(`tel:${lead.phone}`)}
+            onClick={() => setIsWebRTCOpen(true)}
           >
             <Phone className="h-4 w-4 mr-1" />
-            Appel Direct
+            {callState === 'connected' ? 'En Appel WebRTC' : 'Appel WebRTC'}
           </Button>
         </div>
+
+        {/* WebRTC Dialer Modal */}
+        {isWebRTCOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-white">
+                  Appel WebRTC - {lead.first_name} {lead.name}
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsWebRTCOpen(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="text-sm text-gray-300 mb-4">
+                Numéro: {lead.phone}
+              </div>
+              <WebRTCDialer
+                phoneNumber={lead.phone}
+                onCallStateChange={setCallState}
+              />
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

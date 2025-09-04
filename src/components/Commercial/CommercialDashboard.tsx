@@ -243,8 +243,6 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
         commercial={commercial} 
         onBack={() => setActiveView('dashboard')} 
         onLogout={onLogout} 
-        onOpenTemplates={handleOpenTemplates}
-        onOpenCallScript={handleOpenCallScript}
       />
     );
   }

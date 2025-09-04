@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Search, LogOut, RotateCcw } from 'lucide-react';
-import EmailTemplateLightbox from './EmailTemplateLightbox';
 import CommercialManualLeadForm from './CommercialManualLeadForm';
 import LeadRedistributionButton from './LeadRedistributionButton';
 import LeadCard from './LeadCard';
@@ -15,15 +14,11 @@ interface CommercialCRMProps {
   commercial: any;
   onBack: () => void;
   onLogout: () => void;
-  onOpenTemplates: (lead: any) => void;
-  onOpenCallScript: (lead: any) => void;
 }
 
-const CommercialCRM = ({ commercial, onBack, onLogout, onOpenTemplates, onOpenCallScript }: CommercialCRMProps) => {
+const CommercialCRM = ({ commercial, onBack, onLogout }: CommercialCRMProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedLead, setSelectedLead] = useState<any>(null);
-  const [isTemplateLightboxOpen, setIsTemplateLightboxOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('assigned');
 
   const { data: leads, isLoading, refetch } = useQuery({
@@ -192,11 +187,6 @@ const CommercialCRM = ({ commercial, onBack, onLogout, onOpenTemplates, onOpenCa
                     key={lead.id}
                     lead={lead}
                     commercial={commercial}
-                    onTemplatesOpen={(lead) => {
-                      setSelectedLead(lead);
-                      setIsTemplateLightboxOpen(true);
-                    }}
-                    onCallScriptOpen={onOpenCallScript}
                     onUpdate={handleUpdate}
                   />
                 ))}
@@ -222,11 +212,6 @@ const CommercialCRM = ({ commercial, onBack, onLogout, onOpenTemplates, onOpenCa
                     lead={lead}
                     commercial={commercial}
                     isUnassigned={true}
-                    onTemplatesOpen={(lead) => {
-                      setSelectedLead(lead);
-                      setIsTemplateLightboxOpen(true);
-                    }}
-                    onCallScriptOpen={onOpenCallScript}
                     onUpdate={handleUpdate}
                   />
                 ))}
@@ -239,18 +224,6 @@ const CommercialCRM = ({ commercial, onBack, onLogout, onOpenTemplates, onOpenCa
             )}
           </TabsContent>
         </Tabs>
-
-        {selectedLead && (
-          <EmailTemplateLightbox
-            isOpen={isTemplateLightboxOpen}
-            onClose={() => {
-              setIsTemplateLightboxOpen(false);
-              setSelectedLead(null);
-            }}
-            lead={selectedLead}
-            commercial={commercial}
-          />
-        )}
       </div>
     </div>
   );
