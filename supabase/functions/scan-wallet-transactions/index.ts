@@ -25,9 +25,19 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const moralisApiKey = Deno.env.get('MORALIS_API_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const moralisApiKey = Deno.env.get('MORALIS_API_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing Supabase configuration');
+      return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
+    }
+
+    if (!moralisApiKey) {
+      console.error('Missing MORALIS_API_KEY secret');
+      return new Response(JSON.stringify({ error: 'Missing MORALIS_API_KEY. Please add it in Supabase Secrets.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
+    }
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -210,11 +220,20 @@ serve(async (req) => {
                   const commissionRate = commercial.commission_rate || 80;
                   const commercialEarning = (amountUsd * commissionRate) / 100;
 
+                  const { data: comForUpdate } = await supabase
+                    .from('commercials')
+                    .select('balance,total_earnings')
+                    .eq('id', commercial_id)
+                    .single();
+                  const currentBalance = parseFloat((comForUpdate?.balance as unknown as string) || '0');
+                  const currentTotal = parseFloat((comForUpdate?.total_earnings as unknown as string) || '0');
+                  const newBalance = currentBalance + commercialEarning;
+                  const newTotal = currentTotal + commercialEarning;
                   const { error: balanceError } = await supabase
                     .from('commercials')
                     .update({
-                      balance: supabase.sql`balance + ${commercialEarning}`,
-                      total_earnings: supabase.sql`total_earnings + ${commercialEarning}`
+                      balance: newBalance,
+                      total_earnings: newTotal
                     })
                     .eq('id', commercial_id);
 
