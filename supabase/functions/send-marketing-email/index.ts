@@ -96,11 +96,16 @@ const handler = async (req: Request): Promise<Response> => {
     
     console.log('Email request received:', { to, name, first_name, user_id, contact_id, template_id, commercial_id, domain, step });
 
+    // Fallback for name if missing
+    if (!name) {
+      name = first_name || (to ? to.split('@')[0] : 'Client');
+    }
+
     // Validate required fields
-    if (!to || !name || !commercial_id) {
-      console.error('Missing required fields:', { to, name, commercial_id });
+    if (!to || !commercial_id) {
+      console.error('Missing required fields:', { to, commercial_id });
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: to, name, or commercial_id' }),
+        JSON.stringify({ error: 'Missing required fields: to or commercial_id' }),
         { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
