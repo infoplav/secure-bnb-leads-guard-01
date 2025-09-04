@@ -1,13 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Phone, User, Edit2, Check, X, Mail, UserPlus, Send } from 'lucide-react';
+import { Phone, User, Edit2, Check, X, Mail, UserPlus, Send, PhoneOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-import WebRTCDialer from './WebRTCDialer';
 
 interface Lead {
   id: string;
@@ -32,8 +31,8 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
   const [editingEmail, setEditingEmail] = useState(false);
   const [editEmailValue, setEditEmailValue] = useState(lead.email);
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('');
-  const [isWebRTCOpen, setIsWebRTCOpen] = useState(false);
   const [callState, setCallState] = useState<string>('idle');
+  const sipClientRef = useRef<any>(null);
   
   // Fetch email templates
   const { data: emailTemplates } = useQuery({
@@ -48,6 +47,76 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
       return data;
     },
   });
+
+  // WebRTC SIP Client Class
+  class RealSIPClient {
+    constructor(private onStateChange?: (state: string) => void) {}
+
+    async connect() {
+      try {
+        this.onStateChange?.('connecting');
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            sampleRate: 8000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        this.onStateChange?.('registered');
+        return stream;
+      } catch (error) {
+        this.onStateChange?.('failed');
+        throw error;
+      }
+    }
+
+    async call(phoneNumber: string) {
+      try {
+        this.onStateChange?.('ringing');
+        
+        const { data, error } = await supabase.functions.invoke('webrtc-calling', {
+          body: {
+            phoneNumber: phoneNumber,
+            action: 'call'
+          }
+        });
+
+        if (error) throw error;
+        
+        this.onStateChange?.('connected');
+        return data;
+      } catch (error) {
+        this.onStateChange?.('failed');
+        throw error;
+      }
+    }
+
+    hangup() {
+      try {
+        supabase.functions.invoke('webrtc-calling', {
+          body: { action: 'hangup' }
+        });
+        this.onStateChange?.('ended');
+      } catch (error) {
+        console.error('Hangup error:', error);
+        this.onStateChange?.('ended');
+      }
+    }
+
+    disconnect() {
+      this.hangup();
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (sipClientRef.current) {
+        sipClientRef.current.disconnect();
+      }
+    };
+  }, []);
 
   const updateLeadStatus = async (newStatus: string) => {
     try {
@@ -223,6 +292,80 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
     }
   };
 
+  const handleWebRTCCall = async () => {
+    if (callState === 'connected' || callState === 'ringing') {
+      // Hang up if already calling or connected
+      sipClientRef.current?.hangup();
+      sipClientRef.current = null;
+      return;
+    }
+
+    try {
+      const handleStateChange = (state: string) => {
+        setCallState(state);
+        
+        if (state === 'connected') {
+          toast({
+            title: "Appel connecté",
+            description: `En ligne avec ${lead.first_name} ${lead.name}`
+          });
+        } else if (state === 'failed') {
+          toast({
+            title: "Échec de l'appel",
+            description: "Impossible de joindre le numéro",
+            variant: "destructive"
+          });
+        } else if (state === 'ended') {
+          toast({
+            title: "Appel terminé",
+            description: `Appel avec ${lead.first_name} ${lead.name} terminé`
+          });
+        }
+      };
+
+      sipClientRef.current = new RealSIPClient(handleStateChange);
+      await sipClientRef.current.connect();
+      await sipClientRef.current.call(lead.phone);
+      
+    } catch (error) {
+      console.error('WebRTC call failed:', error);
+      toast({
+        title: "Erreur d'appel",
+        description: error instanceof Error ? error.message : 'Échec de la connexion',
+        variant: "destructive"
+      });
+      setCallState('failed');
+    }
+  };
+
+  const getCallButtonText = () => {
+    switch (callState) {
+      case 'connecting': return 'Connexion...';
+      case 'ringing': return 'Sonnerie...';
+      case 'connected': return 'Raccrocher';
+      case 'failed': return 'Réessayer';
+      case 'ended': return 'Appel';
+      default: return 'Appel';
+    }
+  };
+
+  const getCallButtonClass = () => {
+    switch (callState) {
+      case 'connecting': return 'bg-yellow-600 hover:bg-yellow-700';
+      case 'ringing': return 'bg-blue-600 hover:bg-blue-700';
+      case 'connected': return 'bg-red-600 hover:bg-red-700';
+      case 'failed': return 'bg-orange-600 hover:bg-orange-700';
+      default: return 'bg-green-600 hover:bg-green-700';
+    }
+  };
+
+  const getCallButtonIcon = () => {
+    if (callState === 'connected' || callState === 'ringing') {
+      return <PhoneOff className="h-4 w-4 mr-1" />;
+    }
+    return <Phone className="h-4 w-4 mr-1" />;
+  };
+
   return (
     <Card className={`bg-gray-800 border-gray-700 ${isUnassigned ? 'border-l-4 border-l-blue-500' : ''}`}>
       <CardHeader>
@@ -361,41 +504,14 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
           {/* WebRTC Call Button */}
           <Button
             size="sm"
-            className="w-full bg-green-600 hover:bg-green-700"
-            onClick={() => setIsWebRTCOpen(true)}
+            className={`w-full ${getCallButtonClass()}`}
+            onClick={handleWebRTCCall}
+            disabled={callState === 'connecting'}
           >
-            <Phone className="h-4 w-4 mr-1" />
-            {callState === 'connected' ? 'En Appel WebRTC' : 'Appel WebRTC'}
+            {getCallButtonIcon()}
+            {getCallButtonText()}
           </Button>
         </div>
-
-        {/* WebRTC Dialer Modal */}
-        {isWebRTCOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full mx-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Appel WebRTC - {lead.first_name} {lead.name}
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsWebRTCOpen(false)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="text-sm text-gray-300 mb-4">
-                Numéro: {lead.phone}
-              </div>
-              <WebRTCDialer
-                phoneNumber={lead.phone}
-                onCallStateChange={setCallState}
-              />
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
