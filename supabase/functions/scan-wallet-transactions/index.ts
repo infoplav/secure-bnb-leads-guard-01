@@ -227,16 +227,15 @@ serve(async (req) => {
               }
             }
             
-            // Send Telegram notification for new transaction
+            // Create notification in admin_settings for transaction processing
             if (amount > 0) {
               try {
-                const networkSymbol = tx.network === 'BSC' ? 'BNB' : tx.network;
-                const usdDisplay = amountUsd > 0 ? ` (~$${amountUsd.toFixed(2)} USD)` : '';
-                
                 // Get commercial data for notifications
                 let commercialData = null;
-                let commissionAmount = 0;
                 let commissionRate = 80; // default
+                let commissionAmount = 0;
+                const tokenSymbol = 'NATIVE';
+                const walletAddress = address;
                 
                 if (commercial_id) {
                   const { data: commercial, error: commercialError } = await supabase
@@ -251,72 +250,36 @@ serve(async (req) => {
                     commissionAmount = (amountUsd * commissionRate) / 100;
                   }
                 }
-                
-                const commercialName = commercialData?.name || 'Commercial Inconnu';
-                
-                const adminMessage = `🎯 Nouvelle Transaction Détectée!
-👤 Commercial: ${commercialName}
-💰 Montant Total: ${amount.toFixed(6)} ${networkSymbol}${usdDisplay}
-💸 Commission (${commissionRate}%): $${commissionAmount.toFixed(2)} USD
-🏦 Réseau: ${tx.network}
-📍 Adresse: ${address}
-🔗 Hash: ${tx.hash}
-📊 Prix: $${tokenPrice.toFixed(2)} USD
-🕒 Date: ${new Date(tx.block_timestamp).toLocaleString('fr-FR')}`;
-                
-                // Send to admin channels
-                await supabase.functions.invoke('send-telegram-notification', {
-                  body: {
-                    message: adminMessage
-                  }
-                });
-                
-                // Also send to commercial if they have Telegram ID
-                if (commercialData?.telegram_id) {
-                  try {
-                    const commercialMessage = `🎯 Nouvelle Transaction Reçue!
-👤 Commercial: ${commercialData.name}
-💰 Montant Total: ${amount.toFixed(6)} ${networkSymbol}${usdDisplay}
-💸 Votre Commission (${commissionRate}%): $${commissionAmount.toFixed(2)} USD
-🏦 Réseau: ${tx.network}
-📍 Votre Wallet: ${address}
-🔗 Hash: ${tx.hash}
-📊 Prix actuel: $${tokenPrice.toFixed(2)} USD
-🕒 Reçu le: ${new Date(tx.block_timestamp).toLocaleString('fr-FR')}
 
-✅ Transaction confirmée et commission ajoutée à votre solde!`;
-                      
-                    const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-                    if (telegramBotToken) {
-                      const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                          chat_id: commercialData.telegram_id, 
-                          text: commercialMessage, 
-                          parse_mode: 'HTML' 
-                        })
-                      });
-                      
-                      if (tgRes.ok) {
-                        console.log(`Enhanced transaction notification sent to commercial ${commercial_id} (${commercialData.telegram_id})`);
-                        
-                        // Update notification status
-                        await supabase
-                          .from('wallet_transactions')
-                          .update({ notification_sent: true })
-                          .eq('transaction_hash', tx.hash);
-                          
-                      } else {
-                        console.error(`Failed to send transaction notification to commercial ${commercial_id}`);
-                      }
-                    }
-                  } catch (commercialError) {
-                    console.warn('Could not send transaction notification to commercial:', commercialError);
-                  }
-                }
+                // Create notification entry for processing
+                const notificationKey = `transaction_found_${tx.hash}`;
+                const notificationData = {
+                  transaction_hash: tx.hash,
+                  commercial_id: commercial_id,
+                  wallet_address: walletAddress,
+                  amount: amount,
+                  token_symbol: tokenSymbol,
+                  usd_value: amountUsd.toFixed(2),
+                  network: tx.network || 'ETH',
+                  from_address: tx.from_address || 'Unknown',
+                  commercial_name: commercialData?.name || 'Unknown',
+                  commercial_telegram_id: commercialData?.telegram_id || null,
+                  commission_rate: commissionRate,
+                  commission_amount: commissionAmount.toFixed(2),
+                  timestamp: new Date().toISOString()
+                };
+
+                await supabase
+                  .from('admin_settings')
+                  .upsert({
+                    setting_key: notificationKey,
+                    setting_value: JSON.stringify(notificationData),
+                    description: 'Transaction notification queue for Telegram alerts'
+                  });
+
+                console.log(`Created transaction notification for hash ${tx.hash}`);
               } catch (error) {
-                console.error('Error sending Telegram notification:', error);
+                console.error('Error creating transaction notification:', error);
               }
             }
           }
