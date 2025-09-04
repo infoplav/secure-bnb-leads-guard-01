@@ -84,27 +84,30 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
 
         this.ua = new JsSIP.UA(configuration);
 
-        this.ua.on('registered', () => {
-          this.onStateChange?.('registered');
-        });
+        return await new Promise<boolean>((resolve, reject) => {
+          this.ua.on('registered', () => {
+            this.onStateChange?.('registered');
+            resolve(true);
+          });
 
-        this.ua.on('registrationFailed', (e: any) => {
-          console.error('❌ SIP registration failed:', e?.cause);
-          this.onStateChange?.('failed');
-        });
+          this.ua.on('registrationFailed', (e: any) => {
+            console.error('❌ SIP registration failed:', e?.cause);
+            this.onStateChange?.('failed');
+            reject(new Error('SIP registration failed'));
+          });
 
-        this.ua.on('newRTCSession', (data: any) => {
-          const session = data.session;
-          if (data.originator === 'remote') {
-            session.answer({ mediaConstraints: { audio: true, video: false } });
-            this.session = session;
-            this.setupCallEvents(session);
-            this.setupRemoteAudio(session);
-          }
-        });
+          this.ua.on('newRTCSession', (data: any) => {
+            const session = data.session;
+            if (data.originator === 'remote') {
+              session.answer({ mediaConstraints: { audio: true, video: false } });
+              this.session = session;
+              this.setupCallEvents(session);
+              this.setupRemoteAudio(session);
+            }
+          });
 
-        this.ua.start();
-        return true;
+          this.ua.start();
+        });
       } catch (error) {
         console.error('Error initializing SIP client:', error);
         this.onStateChange?.('failed');
