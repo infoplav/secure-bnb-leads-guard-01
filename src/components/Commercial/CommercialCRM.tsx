@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Search, LogOut, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Search, LogOut, RotateCcw, X } from 'lucide-react';
 import CommercialManualLeadForm from './CommercialManualLeadForm';
 import LeadRedistributionButton from './LeadRedistributionButton';
 import LeadCard from './LeadCard';
@@ -138,18 +138,39 @@ const CommercialCRM = ({ commercial, onBack, onLogout }: CommercialCRMProps) => 
             
             {/* Filter Controls - Responsive Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Filtrer par statut" />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
-                  <SelectItem value="all">Tous les statuts</SelectItem>
-                  <SelectItem value="new">New</SelectItem>
-                  <SelectItem value="interested">Interested</SelectItem>
-                  <SelectItem value="not_interested">Not Interested</SelectItem>
-                  <SelectItem value="converted">Converted</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectValue placeholder="Filtrer par statut" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 border-gray-600">
+                    <SelectItem value="all">Tous les statuts</SelectItem>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="not_answering_1">Not Answering (1x)</SelectItem>
+                    <SelectItem value="not_answering_2">Not Answering (2x)</SelectItem>
+                    <SelectItem value="not_answering_3">Not Answering (3x+)</SelectItem>
+                    <SelectItem value="callback">To Call Back</SelectItem>
+                    <SelectItem value="wrong_number">Wrong Number</SelectItem>
+                    <SelectItem value="interested">Interested</SelectItem>
+                    <SelectItem value="not_interested">Not Interested</SelectItem>
+                    <SelectItem value="converted">Converted</SelectItem>
+                    <SelectItem value="do_not_call">Do Not Call</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {/* Clear Filter Button */}
+                {statusFilter !== 'all' && (
+                  <Button
+                    onClick={() => setStatusFilter('all')}
+                    variant="outline"
+                    size="sm"
+                    className="border-gray-600 text-gray-400 hover:bg-gray-800 px-3"
+                    title="Effacer le filtre"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               
               <Button
                 onClick={handleUpdate}
