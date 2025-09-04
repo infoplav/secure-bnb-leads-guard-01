@@ -42,6 +42,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     console.log(`Scanning ${wallet_addresses.length} wallet addresses using Moralis API`);
+    console.log('Wallet addresses:', wallet_addresses);
+    console.log('Commercial ID:', commercial_id);
+    console.log('Moralis API Key exists:', !!moralisApiKey);
 
     const results = [];
 
@@ -72,9 +75,10 @@ serve(async (req) => {
           );
 
           if (!bscResponse.ok) {
-            console.error(`Failed to fetch BSC transactions for ${address}:`, bscResponse.status);
+            console.error(`Failed to fetch BSC transactions for ${address}:`, bscResponse.status, await bscResponse.text());
           } else {
             bscData = await bscResponse.json();
+            console.log(`BSC Response structure:`, JSON.stringify(bscData, null, 2));
             console.log(`Found ${bscData.result?.length || 0} BSC transactions for ${address}`);
           }
 
