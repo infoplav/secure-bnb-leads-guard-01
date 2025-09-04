@@ -15,10 +15,21 @@ serve(async (req) => {
 
   try {
     const requestBody = await req.json();
-    const { type, phoneNumber, offer, userId, callId, sipCredentials } = requestBody;
+    const { 
+      type, 
+      action, 
+      phoneNumber, 
+      offer, 
+      userId, 
+      callId, 
+      sipCredentials 
+    } = requestBody;
+    
+    // Support both 'type' and 'action' fields for backward compatibility
+    const requestType = type || action;
     
     console.log('📧 Received request:', {
-      type,
+      type: requestType,
       phoneNumber,
       userId,
       callId,
@@ -29,10 +40,20 @@ serve(async (req) => {
       } : null
     });
     
-    console.log(`🔄 Processing ${type} request for user ${userId}`);
+    console.log(`🔄 Processing ${requestType} request for user ${userId}`);
     
-    if (type === 'call') {
-      const result = await handleSipCall(phoneNumber, offer, userId, callId, sipCredentials);
+    if (requestType === 'call') {
+      // For simple calls without WebRTC offer, create default parameters
+      const finalUserId = userId || 'anonymous-user';
+      const finalCallId = callId || `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const defaultSipCredentials = sipCredentials || {
+        server: '13.38.136.149',
+        port: 5060,
+        username: '6001',
+        password: 'NUrkdRpMubIe7Xrr'
+      };
+      
+      const result = await handleSipCall(phoneNumber, offer, finalUserId, finalCallId, defaultSipCredentials);
       
       return new Response(
         JSON.stringify(result),
@@ -41,8 +62,9 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
-    } else if (type === 'hangup') {
-      const result = await handleHangup(callId);
+    } else if (requestType === 'hangup') {
+      const finalCallId = callId || 'default-call';
+      const result = await handleHangup(finalCallId);
       
       return new Response(
         JSON.stringify(result),
@@ -51,9 +73,10 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
-    } else if (type === 'ice-candidate') {
+    } else if (requestType === 'ice-candidate') {
       // Handle ICE candidates
-      console.log(`Handling ICE candidate for call ${callId}`);
+      const finalCallId = callId || 'default-call';
+      console.log(`Handling ICE candidate for call ${finalCallId}`);
       
       return new Response(
         JSON.stringify({ success: true }),
@@ -65,7 +88,11 @@ serve(async (req) => {
     }
     
     return new Response(
-      JSON.stringify({ error: 'Unknown request type' }),
+      JSON.stringify({ 
+        error: 'Unknown request type', 
+        received: requestType,
+        expected: ['call', 'hangup', 'ice-candidate']
+      }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
@@ -184,7 +211,7 @@ async function establishSipConnection(sipCredentials: any, phoneNumber: string, 
     console.log('For real SIP calling, you need a SIP stack like JsSIP or server-side SIP gateway');
     
     // Return a proper WebRTC answer that will allow browser-to-browser audio
-    const sdpAnswer = generateWebRTCSDP(offer.sdp);
+    const sdpAnswer = generateWebRTCSDP(offer?.sdp || null);
     
     return {
       success: true,
@@ -244,18 +271,23 @@ async function simulateSipInvite(sipCredentials: any, phoneNumber: string, offer
   });
 }
 
-function generateWebRTCSDP(offerSdp: string): string {
+function generateWebRTCSDP(offerSdp: string | null): string {
   const streamId = crypto.randomUUID();
   const trackId = crypto.randomUUID();
   const ssrc = Math.floor(Math.random() * 0xFFFFFFFF);
   const cname = Math.random().toString(36).substr(2, 12);
   
-  // Extract ice credentials from offer for compatibility
-  const iceUfragMatch = offerSdp.match(/a=ice-ufrag:(.+)/);
-  const icePwdMatch = offerSdp.match(/a=ice-pwd:(.+)/);
+  // Extract ice credentials from offer for compatibility (if offer exists)
+  let iceUfrag = generateIceCredential();
+  let icePwd = generateIceCredential();
   
-  const iceUfrag = iceUfragMatch ? iceUfragMatch[1] : generateIceCredential();
-  const icePwd = icePwdMatch ? icePwdMatch[1] : generateIceCredential();
+  if (offerSdp) {
+    const iceUfragMatch = offerSdp.match(/a=ice-ufrag:(.+)/);
+    const icePwdMatch = offerSdp.match(/a=ice-pwd:(.+)/);
+    
+    iceUfrag = iceUfragMatch ? iceUfragMatch[1] : iceUfrag;
+    icePwd = icePwdMatch ? icePwdMatch[1] : icePwd;
+  }
   
   return `v=0\r
 o=- ${Date.now()} 2 IN IP4 127.0.0.1\r
