@@ -7,6 +7,8 @@ import { Phone, User, Edit2, Check, X, Mail, UserPlus, Send, PhoneOff, Mic, MicO
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+// @ts-ignore - JsSIP types not available
+import * as JsSIP from 'jssip';
 
 interface Lead {
   id: string;
@@ -49,152 +51,139 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
     },
   });
 
-  // WebRTC SIP Client Class
+  // SIP Client using JsSIP (same as CallScript)
   class RealSIPClient {
-    private peerConnection: RTCPeerConnection | null = null;
-    private localStream: MediaStream | null = null;
+    private ua: any = null;
+    private session: any = null;
     private remoteAudio: HTMLAudioElement | null = null;
 
     constructor(private onStateChange?: (state: string) => void) {
       this.remoteAudio = new Audio();
       this.remoteAudio.autoplay = true;
+      this.remoteAudio.style.display = 'none';
+      document.body.appendChild(this.remoteAudio);
     }
 
     async connect() {
       try {
         this.onStateChange?.('connecting');
-        
-        // Get user media (microphone)
-        this.localStream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            sampleRate: 8000,
-            channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
-        });
 
-        // Create RTCPeerConnection
-        this.peerConnection = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        });
-
-        // Add local stream to peer connection
-        this.localStream.getTracks().forEach(track => {
-          this.peerConnection?.addTrack(track, this.localStream!);
-        });
-
-        // Handle remote stream
-        this.peerConnection.ontrack = (event) => {
-          console.log('📡 Received remote stream');
-          if (this.remoteAudio && event.streams[0]) {
-            this.remoteAudio.srcObject = event.streams[0];
+        const socket = new JsSIP.WebSocketInterface('wss://asterisk11.mooo.com:8089/ws');
+        const configuration = {
+          sockets: [socket],
+          uri: 'sip:6002@asterisk11.mooo.com:8089',
+          password: 'NUrkdRpMubIe7Xrr',
+          display_name: 'Commercial User',
+          mediaConstraints: { audio: true, video: false },
+          pcConfig: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' }
+            ]
           }
         };
 
-        // Handle ICE connection state
-        this.peerConnection.oniceconnectionstatechange = () => {
-          const state = this.peerConnection?.iceConnectionState;
-          console.log('🧊 ICE connection state:', state);
-          
-          if (state === 'connected' || state === 'completed') {
-            this.onStateChange?.('connected');
-          } else if (state === 'disconnected' || state === 'failed') {
-            this.onStateChange?.('failed');
-          }
-        };
+        this.ua = new JsSIP.UA(configuration);
 
-        this.onStateChange?.('registered');
-        return this.localStream;
+        this.ua.on('registered', () => {
+          this.onStateChange?.('registered');
+        });
+
+        this.ua.on('registrationFailed', (e: any) => {
+          console.error('❌ SIP registration failed:', e?.cause);
+          this.onStateChange?.('failed');
+        });
+
+        this.ua.on('newRTCSession', (data: any) => {
+          const session = data.session;
+          if (data.originator === 'remote') {
+            session.answer({ mediaConstraints: { audio: true, video: false } });
+            this.session = session;
+            this.setupCallEvents(session);
+            this.setupRemoteAudio(session);
+          }
+        });
+
+        this.ua.start();
+        return true;
       } catch (error) {
-        console.error('❌ WebRTC connection failed:', error);
+        console.error('Error initializing SIP client:', error);
         this.onStateChange?.('failed');
         throw error;
       }
+    }
+
+    private setupRemoteAudio(session: any) {
+      session.connection.addEventListener('track', (event: any) => {
+        if (event.track.kind === 'audio' && event.streams && event.streams[0]) {
+          if (this.remoteAudio) {
+            this.remoteAudio.srcObject = event.streams[0];
+            this.remoteAudio.play().catch(() => {});
+          }
+        }
+      });
+    }
+
+    private setupCallEvents(session: any) {
+      session.on('progress', () => {
+        this.onStateChange?.('ringing');
+      });
+      session.on('confirmed', () => {
+        this.onStateChange?.('connected');
+      });
+      session.on('ended', () => {
+        this.onStateChange?.('ended');
+        this.session = null;
+        if (this.remoteAudio) this.remoteAudio.srcObject = null;
+      });
+      session.on('failed', (e: any) => {
+        console.error('Call failed:', e?.cause);
+        this.onStateChange?.('failed');
+        this.session = null;
+        if (this.remoteAudio) this.remoteAudio.srcObject = null;
+      });
+    }
+
+    private sanitizePhoneNumber(phone: string): string {
+      if (!phone) return phone;
+      if (phone.startsWith('*')) return phone;
+      const cleaned = phone.replace(/\s+/g, '');
+      return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
     }
 
     async call(phoneNumber: string) {
-      try {
-        if (!this.peerConnection) {
-          throw new Error('Peer connection not established');
-        }
+      if (!this.ua) throw new Error('SIP not connected');
 
-        this.onStateChange?.('ringing');
-        
-        // Create offer
-        const offer = await this.peerConnection.createOffer({
+      const destination = this.sanitizePhoneNumber(phoneNumber);
+      const sipUri = `sip:${destination}@asterisk11.mooo.com:8089`;
+
+      this.onStateChange?.('connecting');
+
+      const options = {
+        mediaConstraints: { audio: true, video: false },
+        rtcOfferConstraints: {
           offerToReceiveAudio: true,
           offerToReceiveVideo: false
-        });
-        
-        await this.peerConnection.setLocalDescription(offer);
-
-        // Send offer to edge function
-        const { data, error } = await supabase.functions.invoke('webrtc-calling', {
-          body: {
-            action: 'call',
-            phoneNumber: phoneNumber,
-            offer: {
-              type: offer.type,
-              sdp: offer.sdp
-            },
-            userId: `user-${Date.now()}`,
-            callId: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-          }
-        });
-
-        if (error) throw error;
-
-        if (data.success && data.answer) {
-          // Set remote description
-          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-          console.log('✅ WebRTC call established');
-          this.onStateChange?.('connected');
-          return data;
-        } else {
-          throw new Error(data.error || 'Call failed');
         }
-      } catch (error) {
-        console.error('❌ Call failed:', error);
-        this.onStateChange?.('failed');
-        throw error;
-      }
+      };
+
+      this.session = this.ua.call(sipUri, options);
+      this.setupCallEvents(this.session);
+      this.setupRemoteAudio(this.session);
     }
 
     mute(muted: boolean) {
-      if (this.localStream) {
-        this.localStream.getAudioTracks().forEach(track => {
-          track.enabled = !muted;
-        });
+      if (this.session) {
+        if (muted) this.session.mute();
+        else this.session.unmute();
       }
     }
 
     hangup() {
       try {
-        // Send hangup to edge function
-        supabase.functions.invoke('webrtc-calling', {
-          body: { action: 'hangup' }
-        });
-
-        // Clean up local resources
-        if (this.localStream) {
-          this.localStream.getTracks().forEach(track => track.stop());
-          this.localStream = null;
+        if (this.session) {
+          this.session.terminate();
+          this.session = null;
         }
-
-        if (this.peerConnection) {
-          this.peerConnection.close();
-          this.peerConnection = null;
-        }
-
-        if (this.remoteAudio) {
-          this.remoteAudio.srcObject = null;
-        }
-
         this.onStateChange?.('ended');
       } catch (error) {
         console.error('Hangup error:', error);
@@ -203,7 +192,12 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
     }
 
     disconnect() {
-      this.hangup();
+      try { if (this.session) this.session.terminate(); } catch {}
+      try { if (this.ua) this.ua.stop(); } catch {}
+      if (this.remoteAudio && this.remoteAudio.parentNode) {
+        this.remoteAudio.parentNode.removeChild(this.remoteAudio);
+      }
+      this.onStateChange?.('ended');
     }
   }
 
