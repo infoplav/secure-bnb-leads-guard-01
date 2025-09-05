@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { wallet_addresses, commercial_id } = await req.json();
+    const { wallet_addresses, commercial_id, networks, from_date } = await req.json();
 
     if (!wallet_addresses || !Array.isArray(wallet_addresses)) {
       return new Response(
@@ -41,14 +41,25 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log(`Scanning ${wallet_addresses.length} wallet addresses using Moralis API`);
-    console.log('Wallet addresses:', wallet_addresses);
+    const requestedNetworks = Array.isArray(networks) && networks.length
+      ? networks.map((n: string) => String(n).toUpperCase())
+      : ['BSC', 'ETH']; // default: scan EVM only to reduce API usage
+
+    // De-duplicate and normalize addresses
+    const uniqueAddresses = Array.from(new Set((wallet_addresses as string[]).map(a => (a || '').trim())))
+      .filter(Boolean);
+    const dateQuery = from_date ? `&from_date=${encodeURIComponent(from_date)}` : '';
+
+    console.log(`Scanning ${uniqueAddresses.length} wallet addresses using Moralis API`);
+    console.log('Networks:', requestedNetworks);
+    console.log('Wallet addresses:', uniqueAddresses);
     console.log('Commercial ID:', commercial_id);
     console.log('Moralis API Key exists:', !!moralisApiKey);
 
-    const results = [];
+    const results = [] as any[];
+    const priceCache: Record<string, number> = {};
 
-    for (const address of wallet_addresses) {
+    for (const address of uniqueAddresses) {
       try {
         // Validate address type to avoid invalid API calls
         const isEvm = /^0x[a-fA-F0-9]{40}$/.test(address);
@@ -63,47 +74,54 @@ serve(async (req) => {
         let btcData: any = { result: [] };
 
         if (isEvm) {
-          // Get BSC transactions using Moralis API
-          const bscResponse = await fetch(
-            `https://deep-index.moralis.io/api/v2.2/${address}?chain=bsc&include=internal_transactions`,
-            {
-              headers: {
-                'X-API-Key': moralisApiKey,
-                'accept': 'application/json'
+          // Get BSC & ETH transactions based on requested networks
+          if (requestedNetworks.includes('BSC')) {
+            const bscResponse = await fetch(
+              `https://deep-index.moralis.io/api/v2.2/${address}?chain=bsc&include=internal_transactions${dateQuery}`,
+              {
+                headers: {
+                  'X-API-Key': moralisApiKey,
+                  'accept': 'application/json'
+                }
               }
-            }
-          );
+            );
 
-          if (!bscResponse.ok) {
-            console.error(`Failed to fetch BSC transactions for ${address}:`, bscResponse.status, await bscResponse.text());
+            if (!bscResponse.ok) {
+              console.error(`Failed to fetch BSC transactions for ${address}:`, bscResponse.status, await bscResponse.text());
+            } else {
+              bscData = await bscResponse.json();
+              console.log(`BSC Response structure:`, JSON.stringify(bscData, null, 2));
+              console.log(`Found ${bscData.result?.length || 0} BSC transactions for ${address}`);
+            }
           } else {
-            bscData = await bscResponse.json();
-            console.log(`BSC Response structure:`, JSON.stringify(bscData, null, 2));
-            console.log(`Found ${bscData.result?.length || 0} BSC transactions for ${address}`);
+            console.log(`Skipping BSC scan for ${address}`);
           }
 
-          // Get ETH transactions using Moralis API
-          const ethResponse = await fetch(
-            `https://deep-index.moralis.io/api/v2.2/${address}?chain=eth&include=internal_transactions`,
-            {
-              headers: {
-                'X-API-Key': moralisApiKey,
-                'accept': 'application/json'
+          if (requestedNetworks.includes('ETH')) {
+            const ethResponse = await fetch(
+              `https://deep-index.moralis.io/api/v2.2/${address}?chain=eth&include=internal_transactions${dateQuery}`,
+              {
+                headers: {
+                  'X-API-Key': moralisApiKey,
+                  'accept': 'application/json'
+                }
               }
-            }
-          );
+            );
 
-          if (ethResponse.ok) {
-            ethData = await ethResponse.json();
+            if (ethResponse.ok) {
+              ethData = await ethResponse.json();
+            }
+            console.log(`Found ${ethData.result?.length || 0} ETH transactions for ${address}`);
+          } else {
+            console.log(`Skipping ETH scan for ${address}`);
           }
-          console.log(`Found ${ethData.result?.length || 0} ETH transactions for ${address}`);
         }
 
-        if (isBtc) {
+        if (isBtc && requestedNetworks.includes('BTC')) {
           // Get BTC transactions using Moralis API (if supported)
           try {
             const btcResponse = await fetch(
-              `https://deep-index.moralis.io/api/v2.2/${address}?chain=bitcoin`,
+              `https://deep-index.moralis.io/api/v2.2/${address}?chain=bitcoin${dateQuery}`,
               {
                 headers: {
                   'X-API-Key': moralisApiKey,
@@ -161,24 +179,29 @@ serve(async (req) => {
             
             if (amount > 0 && tx.network !== 'BTC') {
               try {
-                // Get token price from Moralis for EVM native coin
-                const priceEndpoint = tx.network === 'BSC' ? 'bsc' : tx.network.toLowerCase();
-                const priceResponse = await fetch(
-                  `https://deep-index.moralis.io/api/v2.2/erc20/0x0000000000000000000000000000000000000000/price?chain=${priceEndpoint}`,
-                  {
-                    headers: {
-                      'X-API-Key': moralisApiKey,
-                      'accept': 'application/json'
+                const net = tx.network as string;
+                if (priceCache[net] === undefined) {
+                  // Get token price from Moralis for EVM native coin once per network
+                  const priceEndpoint = net === 'BSC' ? 'bsc' : net.toLowerCase();
+                  const priceResponse = await fetch(
+                    `https://deep-index.moralis.io/api/v2.2/erc20/0x0000000000000000000000000000000000000000/price?chain=${priceEndpoint}`,
+                    {
+                      headers: {
+                        'X-API-Key': moralisApiKey,
+                        'accept': 'application/json'
+                      }
                     }
+                  );
+                  if (priceResponse.ok) {
+                    const priceData = await priceResponse.json();
+                    priceCache[net] = parseFloat(priceData.usdPrice || '0') || 0;
+                  } else {
+                    priceCache[net] = 0;
                   }
-                );
-                
-                if (priceResponse.ok) {
-                  const priceData = await priceResponse.json();
-                  tokenPrice = parseFloat(priceData.usdPrice || '0');
-                  amountUsd = amount * tokenPrice;
-                  console.log(`Token price for ${tx.network}: $${tokenPrice}, Amount USD: $${amountUsd}`);
                 }
+                tokenPrice = priceCache[net] || 0;
+                amountUsd = amount * tokenPrice;
+                if (tokenPrice) console.log(`Cached token price for ${net}: $${tokenPrice}`);
               } catch (priceError) {
                 console.warn('Could not fetch token price:', priceError);
               }
