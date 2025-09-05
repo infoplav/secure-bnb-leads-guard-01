@@ -71,11 +71,12 @@ const SpeedDial = ({ commercial, onBack, onLogout, sipConfig }: SpeedDialProps) 
       console.log('🔍 SpeedDial: Commercial object:', commercial);
       
       try {
-        // Fetch all leads first
+        // Fetch only "new" status leads for speed dial
         const { data, error } = await supabase
           .from('marketing_contacts')
           .select('*')
-          .eq('commercial_id', commercial.id);
+          .eq('commercial_id', commercial.id)
+          .eq('status', 'new');
         
         if (error) {
           console.error('❌ SpeedDial: Error fetching leads:', error);

@@ -43,10 +43,11 @@ const CallScript = ({ lead, commercial, onBack, onLogout, onNextLead, userLead, 
   const [showMultiCaller, setShowMultiCaller] = useState(false);
   const [selectedQuickTemplate, setSelectedQuickTemplate] = useState<string>('');
 
-  // Update lead email when lead changes
+  // Update lead email and status when lead changes
   useEffect(() => {
     setLeadEmail(lead.email);
-  }, [lead.id, lead.email]);
+    setLeadStatus(lead.status || 'contacted');
+  }, [lead.id, lead.email, lead.status]);
 
   // Fetch email templates
   const { data: emailTemplates } = useQuery({
