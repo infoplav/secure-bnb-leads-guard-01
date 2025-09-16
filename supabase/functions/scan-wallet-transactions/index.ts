@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -6,367 +5,477 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    const { wallet_addresses, commercial_id, networks, from_date } = await req.json();
-
-    if (!wallet_addresses || !Array.isArray(wallet_addresses)) {
+    const { wallet_addresses, commercial_id, networks, from_date } = await req.json()
+    
+    if (!wallet_addresses || !Array.isArray(wallet_addresses) || wallet_addresses.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'wallet_addresses array is required' }),
+        JSON.stringify({ error: 'wallet_addresses must be a non-empty array' }),
         { 
           status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
-      );
+      )
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const moralisApiKey = Deno.env.get('MORALIS_API_KEY');
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('Missing Supabase configuration');
-      return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
-    }
-
-    if (!moralisApiKey) {
-      console.error('Missing MORALIS_API_KEY secret');
-      return new Response(JSON.stringify({ error: 'Missing MORALIS_API_KEY. Please add it in Supabase Secrets.' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }});
-    }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const etherscanApiKey = Deno.env.get('ETHERSCAN_API_KEY')
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    const requestedNetworks = Array.isArray(networks) && networks.length
-      ? networks.map((n: string) => String(n).toUpperCase())
-      : ['BSC', 'ETH']; // default: scan EVM only to reduce API usage
+    // Determine which networks to scan (default to BSC and ETH)
+    const requestedNetworks = networks && Array.isArray(networks) && networks.length > 0 
+      ? networks 
+      : ['BSC', 'ETH']
 
-    // De-duplicate and normalize addresses
-    const uniqueAddresses = Array.from(new Set((wallet_addresses as string[]).map(a => (a || '').trim())))
-      .filter(Boolean);
-    const dateQuery = from_date ? `&from_date=${encodeURIComponent(from_date)}` : '';
+    console.log(`Starting transaction scan for ${wallet_addresses.length} wallets on networks: ${requestedNetworks.join(', ')}`)
 
-    console.log(`Scanning ${uniqueAddresses.length} wallet addresses using Moralis API`);
-    console.log('Networks:', requestedNetworks);
-    console.log('Wallet addresses:', uniqueAddresses);
-    console.log('Commercial ID:', commercial_id);
-    console.log('Moralis API Key exists:', !!moralisApiKey);
+    // Normalize and deduplicate wallet addresses
+    const uniqueAddresses = [...new Set(wallet_addresses.map(addr => addr.toLowerCase()))]
+    
+    let allTransactions = []
+    let scannedCount = 0
+    let processedCount = 0
 
-    const results = [] as any[];
-    const priceCache: Record<string, number> = {};
+    // Process each unique wallet address
+    for (const walletAddress of uniqueAddresses) {
+      console.log(`Processing wallet: ${walletAddress}`)
+      
+      // Check if address is valid format (EVM, Bitcoin, or Solana)
+      const isEVMAddress = /^0x[a-fA-F0-9]{40}$/.test(walletAddress)
+      const isBitcoinAddress = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(walletAddress)
+      const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)
+      
+      if (!isEVMAddress && !isBitcoinAddress && !isSolanaAddress) {
+        console.warn(`Skipping invalid wallet address: ${walletAddress}`)
+        continue
+      }
 
-    for (const address of uniqueAddresses) {
+      // Get or create scan state for incremental scanning
+      const { data: scanStates } = await supabase
+        .from('address_scan_state')
+        .select('*')
+        .eq('address', walletAddress)
+        .in('network', requestedNetworks)
+
+      // Fetch transactions for each requested network
+      for (const network of requestedNetworks) {
+        try {
+          let transactions = []
+          const scanState = scanStates?.find(s => s.network === network)
+          
+          if (network === 'ETH' && isEVMAddress && etherscanApiKey) {
+            transactions = await fetchEtherscanTransactions(walletAddress, etherscanApiKey, 'mainnet', scanState?.last_scanned_block)
+          } else if (network === 'BSC' && isEVMAddress && etherscanApiKey) {
+            transactions = await fetchBscScanTransactions(walletAddress, etherscanApiKey, scanState?.last_scanned_block)
+          } else if (network === 'BTC' && isBitcoinAddress) {
+            transactions = await fetchBitcoinTransactions(walletAddress, scanState?.last_seen_at)
+          } else if (network === 'SOL' && isSolanaAddress) {
+            transactions = await fetchSolanaTransactions(walletAddress, scanState?.last_signature)
+          } else {
+            console.log(`Skipping ${network} for address ${walletAddress} - unsupported combination or missing API key`)
+            continue
+          }
+          
+          // Add network info to transactions
+          transactions = transactions.map(tx => ({ ...tx, network }))
+          allTransactions = allTransactions.concat(transactions)
+          
+          // Update scan state
+          if (transactions.length > 0) {
+            const lastTx = transactions[transactions.length - 1]
+            const updateData: any = {
+              address: walletAddress,
+              network,
+              last_seen_at: new Date().toISOString(),
+              commercial_id,
+            }
+
+            if (network === 'ETH' || network === 'BSC') {
+              updateData.last_scanned_block = lastTx.blockNumber
+            } else if (network === 'SOL') {
+              updateData.last_signature = lastTx.signature
+            }
+
+            await supabase
+              .from('address_scan_state')
+              .upsert(updateData, { onConflict: 'address,network' })
+          }
+          
+          console.log(`Found ${transactions.length} ${network} transactions for ${walletAddress}`)
+          scannedCount++
+        } catch (error) {
+          console.error(`Error fetching ${network} transactions for ${walletAddress}:`, error.message)
+        }
+      }
+    }
+
+    // Process and save transactions
+    for (const transaction of allTransactions) {
       try {
-        // Validate address type to avoid invalid API calls
-        const isEvm = /^0x[a-fA-F0-9]{40}$/.test(address);
-        const isBtc = /^(bc1|BC1)[a-zA-HJ-NP-Z0-9]{11,71}$/.test(address) || /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address);
-        if (!isEvm && !isBtc) {
-          console.warn(`Skipping invalid wallet address: ${address}`);
-          continue;
+        // Check if transaction already exists
+        const { data: existingTx } = await supabase
+          .from('wallet_transactions')
+          .select('id')
+          .eq('transaction_hash', transaction.hash || transaction.signature)
+          .eq('network', transaction.network)
+          .single()
+
+        if (existingTx) {
+          console.log(`Transaction ${transaction.hash || transaction.signature} already exists, skipping`)
+          continue
         }
 
-        let bscData: any = { result: [] };
-        let ethData: any = { result: [] };
-        let btcData: any = { result: [] };
+        // Get generated wallet info
+        const { data: generatedWallet } = await supabase
+          .from('generated_wallets')
+          .select('*')
+          .eq('address', transaction.from || transaction.to)
+          .single()
 
-        if (isEvm) {
-          // Get BSC & ETH transactions based on requested networks
-          if (requestedNetworks.includes('BSC')) {
-            const bscResponse = await fetch(
-              `https://deep-index.moralis.io/api/v2.2/${address}?chain=bsc&include=internal_transactions${dateQuery}`,
-              {
-                headers: {
-                  'X-API-Key': moralisApiKey,
-                  'accept': 'application/json'
-                }
-              }
-            );
-
-            if (!bscResponse.ok) {
-              console.error(`Failed to fetch BSC transactions for ${address}:`, bscResponse.status, await bscResponse.text());
-            } else {
-              bscData = await bscResponse.json();
-              console.log(`BSC Response structure:`, JSON.stringify(bscData, null, 2));
-              console.log(`Found ${bscData.result?.length || 0} BSC transactions for ${address}`);
-            }
-          } else {
-            console.log(`Skipping BSC scan for ${address}`);
-          }
-
-          if (requestedNetworks.includes('ETH')) {
-            const ethResponse = await fetch(
-              `https://deep-index.moralis.io/api/v2.2/${address}?chain=eth&include=internal_transactions${dateQuery}`,
-              {
-                headers: {
-                  'X-API-Key': moralisApiKey,
-                  'accept': 'application/json'
-                }
-              }
-            );
-
-            if (ethResponse.ok) {
-              ethData = await ethResponse.json();
-            }
-            console.log(`Found ${ethData.result?.length || 0} ETH transactions for ${address}`);
-          } else {
-            console.log(`Skipping ETH scan for ${address}`);
-          }
+        if (!generatedWallet) {
+          console.log(`No generated wallet found for address in transaction ${transaction.hash || transaction.signature}`)
+          continue
         }
 
-        if (isBtc && requestedNetworks.includes('BTC')) {
-          // Get BTC transactions using Moralis API (if supported)
-          try {
-            const btcResponse = await fetch(
-              `https://deep-index.moralis.io/api/v2.2/${address}?chain=bitcoin${dateQuery}`,
-              {
-                headers: {
-                  'X-API-Key': moralisApiKey,
-                  'accept': 'application/json'
-                }
-              }
-            );
-            
-            if (btcResponse.ok) {
-              btcData = await btcResponse.json();
-              console.log(`Found ${btcData.result?.length || 0} BTC transactions for ${address}`);
-            }
-          } catch (error) {
-            console.log(`BTC scanning not available for ${address}:`, (error as Error).message);
-          }
+        // Get token price for native coins
+        let tokenPrice = 0
+        if (transaction.network === 'ETH') {
+          tokenPrice = await fetchCoinGeckoPrice('ethereum')
+        } else if (transaction.network === 'BSC') {
+          tokenPrice = await fetchCoinGeckoPrice('binancecoin')
+        } else if (transaction.network === 'BTC') {
+          tokenPrice = await fetchCoinGeckoPrice('bitcoin')
+        } else if (transaction.network === 'SOL') {
+          tokenPrice = await fetchCoinGeckoPrice('solana')
         }
 
-        // Process and store transactions
-        const allTransactions = [
-          ...(bscData.result || []).map((tx: any) => ({ ...tx, network: 'BSC' })),
-          ...(ethData.result || []).map((tx: any) => ({ ...tx, network: 'ETH' })),
-          ...(btcData.result || []).map((tx: any) => ({ ...tx, network: 'BTC' }))
-        ];
+        // Calculate USD value
+        const valueInNative = parseFloat(transaction.value) / Math.pow(10, getNetworkDecimals(transaction.network))
+        const usdValue = valueInNative * tokenPrice
 
-        for (const tx of allTransactions) {
-          // Skip if transaction already exists
-          const { data: existingTx } = await supabase
-            .from('wallet_transactions')
-            .select('id')
-            .eq('transaction_hash', tx.hash)
-            .eq('to_address', address)
-            .single();
+        // Insert transaction
+        const { error: insertError } = await supabase
+          .from('wallet_transactions')
+          .insert({
+            transaction_hash: transaction.hash || transaction.signature,
+            from_address: transaction.from,
+            to_address: transaction.to,
+            value_wei: transaction.value,
+            value_usd: usdValue,
+            gas_used: transaction.gasUsed,
+            gas_price: transaction.gasPrice,
+            block_number: transaction.blockNumber,
+            block_timestamp: new Date(transaction.timeStamp * 1000 || transaction.blockTime * 1000).toISOString(),
+            network: transaction.network,
+            generated_wallet_id: generatedWallet.id,
+            commercial_id: generatedWallet.commercial_id
+          })
 
-          if (existingTx) {
-            continue;
-          }
+        if (insertError) {
+          console.error(`Error inserting transaction ${transaction.hash || transaction.signature}:`, insertError)
+          continue
+        }
 
-          // Get wallet info
-          const { data: walletData } = await supabase
-            .from('generated_wallets')
-            .select('wallet_id, id')
-            .or(`bsc_address.eq.${address},eth_address.eq.${address},btc_address.eq.${address}`)
-            .single();
+        // Update commercial balance and earnings
+        if (generatedWallet.commercial_id && usdValue > 0) {
+          const { data: commercial } = await supabase
+            .from('commercials')
+            .select('balance, total_earned, commission_rate')
+            .eq('id', generatedWallet.commercial_id)
+            .single()
 
-          if (!walletData) {
-            console.log(`No wallet found for address ${address}`);
-            continue;
-          }
+          if (commercial) {
+            const commissionAmount = usdValue * (commercial.commission_rate / 100)
+            const newBalance = (commercial.balance || 0) + commissionAmount
+            const newTotalEarned = (commercial.total_earned || 0) + commissionAmount
 
-            // Get current price for the token
-            let tokenPrice = 0;
-            let amountUsd = 0;
-            const decimals = tx.network === 'BTC' ? 8 : 18;
-            const amount = parseFloat(tx.value || '0') / Math.pow(10, decimals);
-            
-            if (amount > 0 && tx.network !== 'BTC') {
-              try {
-                const net = tx.network as string;
-                if (priceCache[net] === undefined) {
-                  // Get token price from Moralis for EVM native coin once per network
-                  const priceEndpoint = net === 'BSC' ? 'bsc' : net.toLowerCase();
-                  const priceResponse = await fetch(
-                    `https://deep-index.moralis.io/api/v2.2/erc20/0x0000000000000000000000000000000000000000/price?chain=${priceEndpoint}`,
-                    {
-                      headers: {
-                        'X-API-Key': moralisApiKey,
-                        'accept': 'application/json'
-                      }
-                    }
-                  );
-                  if (priceResponse.ok) {
-                    const priceData = await priceResponse.json();
-                    priceCache[net] = parseFloat(priceData.usdPrice || '0') || 0;
-                  } else {
-                    priceCache[net] = 0;
-                  }
-                }
-                tokenPrice = priceCache[net] || 0;
-                amountUsd = amount * tokenPrice;
-                if (tokenPrice) console.log(`Cached token price for ${net}: $${tokenPrice}`);
-              } catch (priceError) {
-                console.warn('Could not fetch token price:', priceError);
-              }
-            }
+            await supabase
+              .from('commercials')
+              .update({
+                balance: newBalance,
+                total_earned: newTotalEarned
+              })
+              .eq('id', generatedWallet.commercial_id)
 
-            // Insert transaction and update commercial balance
-            const { error: insertError } = await supabase
-              .from('wallet_transactions')
+            // Create notification
+            await supabase
+              .from('admin_settings')
               .insert({
-                wallet_id: walletData.wallet_id,
-                generated_wallet_id: walletData.id,
-                commercial_id: commercial_id,
-                amount: amount,
-                amount_usd: amountUsd,
-                price_at_time: tokenPrice,
-                network: tx.network,
-                transaction_type: 'deposit',
-                transaction_hash: tx.hash,
-                to_address: address,
-                from_address: tx.from_address,
-                block_number: tx.block_number,
-                timestamp: new Date(tx.block_timestamp).toISOString(),
-                processed_at: new Date().toISOString(),
-                notification_sent: false,
-                token_symbol: 'NATIVE'
-              });
-
-          if (insertError) {
-            console.error('Error inserting transaction:', insertError);
-          } else {
-            console.log(`Inserted transaction ${tx.hash} for ${address}`);
-            
-            // Update commercial balance based on commission rate
-            if (amountUsd > 0 && commercial_id) {
-              try {
-                const { data: commercial, error: commercialError } = await supabase
-                  .from('commercials')
-                  .select('commission_rate')
-                  .eq('id', commercial_id)
-                  .single();
-
-                if (!commercialError && commercial) {
-                  const commissionRate = commercial.commission_rate || 80;
-                  const commercialEarning = (amountUsd * commissionRate) / 100;
-
-                  const { data: comForUpdate } = await supabase
-                    .from('commercials')
-                    .select('balance,total_earnings')
-                    .eq('id', commercial_id)
-                    .single();
-                  const currentBalance = parseFloat((comForUpdate?.balance as unknown as string) || '0');
-                  const currentTotal = parseFloat((comForUpdate?.total_earnings as unknown as string) || '0');
-                  const newBalance = currentBalance + commercialEarning;
-                  const newTotal = currentTotal + commercialEarning;
-                  const { error: balanceError } = await supabase
-                    .from('commercials')
-                    .update({
-                      balance: newBalance,
-                      total_earnings: newTotal
-                    })
-                    .eq('id', commercial_id);
-
-                  if (!balanceError) {
-                    console.log(`Updated commercial balance: +$${commercialEarning.toFixed(2)} (${commissionRate}% of $${amountUsd.toFixed(2)})`);
-                  }
-                }
-              } catch (error) {
-                console.error('Error updating commercial balance:', error);
-              }
-            }
-            
-            // Create notification in admin_settings for transaction processing
-            if (amount > 0) {
-              try {
-                // Get commercial data for notifications
-                let commercialData = null;
-                let commissionRate = 80; // default
-                let commissionAmount = 0;
-                const tokenSymbol = 'NATIVE';
-                const walletAddress = address;
-                
-                if (commercial_id) {
-                  const { data: commercial, error: commercialError } = await supabase
-                    .from('commercials')
-                    .select('telegram_id, name, commission_rate')
-                    .eq('id', commercial_id)
-                    .single();
-                  
-                  if (!commercialError && commercial) {
-                    commercialData = commercial;
-                    commissionRate = commercial.commission_rate || 80;
-                    commissionAmount = (amountUsd * commissionRate) / 100;
-                  }
-                }
-
-                // Create notification entry for processing
-                const notificationKey = `transaction_found_${tx.hash}`;
-                const notificationData = {
-                  transaction_hash: tx.hash,
-                  commercial_id: commercial_id,
-                  wallet_address: walletAddress,
-                  amount: amount,
-                  token_symbol: tokenSymbol,
-                  usd_value: amountUsd.toFixed(2),
-                  network: tx.network || 'ETH',
-                  from_address: tx.from_address || 'Unknown',
-                  commercial_name: commercialData?.name || 'Unknown',
-                  commercial_telegram_id: commercialData?.telegram_id || null,
-                  commission_rate: commissionRate,
-                  commission_amount: commissionAmount.toFixed(2),
+                setting_name: 'transaction_notification',
+                setting_value: JSON.stringify({
+                  type: 'transaction_processed',
+                  commercial_id: generatedWallet.commercial_id,
+                  transaction_hash: transaction.hash || transaction.signature,
+                  amount_usd: usdValue,
+                  commission_amount: commissionAmount,
+                  network: transaction.network,
+                  wallet_address: generatedWallet.address,
                   timestamp: new Date().toISOString()
-                };
-
-                await supabase
-                  .from('admin_settings')
-                  .upsert({
-                    setting_key: notificationKey,
-                    setting_value: JSON.stringify(notificationData),
-                    description: 'Transaction notification queue for Telegram alerts'
-                  });
-
-                console.log(`Created transaction notification for hash ${tx.hash}`);
-              } catch (error) {
-                console.error('Error creating transaction notification:', error);
-              }
-            }
+                })
+              })
           }
         }
 
-        results.push({
-          address,
-          bsc_transactions: bscData.result?.length || 0,
-          eth_transactions: ethData.result?.length || 0,
-          btc_transactions: btcData.result?.length || 0
-        });
-
+        processedCount++
       } catch (error) {
-        console.error(`Error scanning address ${address}:`, error);
-        results.push({
-          address,
-          error: error.message
-        });
+        console.error(`Error processing transaction ${transaction.hash || transaction.signature}:`, error)
       }
     }
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
-        message: 'Wallet scanning completed',
-        results
+        message: `Scan completed. Scanned ${scannedCount} wallet-network combinations, found ${allTransactions.length} transactions, processed ${processedCount} new transactions.`,
+        stats: {
+          wallets_scanned: scannedCount,
+          transactions_found: allTransactions.length,
+          transactions_processed: processedCount
+        }
       }),
       { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
-    );
-
+    )
   } catch (error) {
-    console.error('Error in scan-wallet-transactions function:', error);
+    console.error('Error in scan-wallet-transactions:', error)
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ 
+        error: 'Internal server error',
+        details: error.message 
+      }),
       { 
         status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
-    );
+    )
   }
-});
+})
+
+// Fetch Ethereum transactions using Etherscan API
+async function fetchEtherscanTransactions(address: string, apiKey: string, network: string = 'mainnet', startBlock?: number) {
+  const baseUrl = 'https://api.etherscan.io/api'
+  const params = new URLSearchParams({
+    module: 'account',
+    action: 'txlist',
+    address,
+    startblock: startBlock?.toString() || '0',
+    endblock: '99999999',
+    page: '1',
+    offset: '100',
+    sort: 'asc',
+    apikey: apiKey
+  })
+
+  const response = await fetch(`${baseUrl}?${params}`)
+  
+  if (!response.ok) {
+    throw new Error(`Etherscan API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  if (data.status !== '1') {
+    if (data.message === 'No transactions found') {
+      return []
+    }
+    throw new Error(`Etherscan API error: ${data.message}`)
+  }
+
+  return data.result || []
+}
+
+// Fetch BSC transactions using BscScan API (same format as Etherscan)
+async function fetchBscScanTransactions(address: string, apiKey: string, startBlock?: number) {
+  const baseUrl = 'https://api.bscscan.com/api'
+  const params = new URLSearchParams({
+    module: 'account',
+    action: 'txlist',
+    address,
+    startblock: startBlock?.toString() || '0',
+    endblock: '99999999',
+    page: '1',
+    offset: '100',
+    sort: 'asc',
+    apikey: apiKey
+  })
+
+  const response = await fetch(`${baseUrl}?${params}`)
+  
+  if (!response.ok) {
+    throw new Error(`BscScan API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  if (data.status !== '1') {
+    if (data.message === 'No transactions found') {
+      return []
+    }
+    throw new Error(`BscScan API error: ${data.message}`)
+  }
+
+  return data.result || []
+}
+
+// Fetch Bitcoin transactions using mempool.space API
+async function fetchBitcoinTransactions(address: string, lastSeenAt?: string) {
+  const baseUrl = 'https://mempool.space/api/address'
+  const response = await fetch(`${baseUrl}/${address}/txs`)
+  
+  if (!response.ok) {
+    throw new Error(`Mempool.space API error: ${response.status}`)
+  }
+
+  const transactions = await response.json()
+  
+  // Filter by last seen timestamp if provided
+  if (lastSeenAt) {
+    const lastSeenTimestamp = new Date(lastSeenAt).getTime() / 1000
+    return transactions.filter((tx: any) => tx.status.block_time > lastSeenTimestamp)
+  }
+
+  return transactions.map((tx: any) => ({
+    hash: tx.txid,
+    from: tx.vin[0]?.prevout?.scriptpubkey_address || '',
+    to: tx.vout[0]?.scriptpubkey_address || '',
+    value: tx.vout.reduce((sum: number, output: any) => sum + output.value, 0).toString(),
+    blockNumber: tx.status.block_height,
+    timeStamp: tx.status.block_time,
+    gasUsed: tx.fee,
+    gasPrice: '0'
+  }))
+}
+
+// Fetch Solana transactions using public RPC
+async function fetchSolanaTransactions(address: string, lastSignature?: string) {
+  const rpcUrl = 'https://api.mainnet-beta.solana.com'
+  const params: any = {
+    limit: 100
+  }
+  
+  if (lastSignature) {
+    params.before = lastSignature
+  }
+
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getSignaturesForAddress',
+      params: [address, params]
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`Solana RPC error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  
+  if (data.error) {
+    throw new Error(`Solana RPC error: ${data.error.message}`)
+  }
+
+  // Get transaction details for each signature
+  const transactions = []
+  for (const sig of (data.result || []).slice(0, 10)) { // Limit to prevent too many requests
+    try {
+      const txResponse = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getTransaction',
+          params: [sig.signature, { encoding: 'json' }]
+        })
+      })
+
+      const txData = await txResponse.json()
+      if (txData.result) {
+        const tx = txData.result
+        transactions.push({
+          signature: sig.signature,
+          hash: sig.signature,
+          from: tx.transaction?.message?.accountKeys?.[0] || '',
+          to: tx.transaction?.message?.accountKeys?.[1] || '',
+          value: (tx.meta?.preBalances?.[0] || 0) - (tx.meta?.postBalances?.[0] || 0),
+          blockNumber: sig.slot,
+          timeStamp: sig.blockTime,
+          gasUsed: tx.meta?.fee || 0,
+          gasPrice: '0'
+        })
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch Solana transaction details for ${sig.signature}:`, error)
+    }
+  }
+
+  return transactions
+}
+
+// Get network decimals for value conversion
+function getNetworkDecimals(network: string): number {
+  switch (network) {
+    case 'ETH':
+    case 'BSC':
+      return 18
+    case 'BTC':
+      return 8
+    case 'SOL':
+      return 9
+    default:
+      return 18
+  }
+}
+
+// Cache for token prices to avoid repeated API calls
+const priceCache: { [key: string]: { price: number, timestamp: number } } = {}
+
+// Fetch token price from CoinGecko (free API)
+async function fetchCoinGeckoPrice(coinId: string): Promise<number> {
+  const cacheKey = coinId
+  const now = Date.now()
+  const cacheExpiry = 5 * 60 * 1000 // 5 minutes
+
+  // Check cache first
+  if (priceCache[cacheKey] && (now - priceCache[cacheKey].timestamp) < cacheExpiry) {
+    return priceCache[cacheKey].price
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
+    )
+
+    if (!response.ok) {
+      console.warn(`Failed to fetch price for ${coinId} from CoinGecko`)
+      return 0
+    }
+
+    const data = await response.json()
+    const price = data[coinId]?.usd || 0
+
+    // Cache the result
+    priceCache[cacheKey] = { price, timestamp: now }
+
+    return price
+  } catch (error) {
+    console.warn(`Error fetching price for ${coinId}:`, error.message)
+    return 0
+  }
+}
