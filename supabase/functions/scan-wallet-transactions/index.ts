@@ -44,9 +44,10 @@ Deno.serve(async (req) => {
     let scannedCount = 0
     let processedCount = 0
 
-    // Process each unique wallet address
-    for (const walletAddress of uniqueAddresses) {
-      console.log(`Processing wallet: ${walletAddress}`)
+    // Process each unique wallet address with rate limiting
+    for (let i = 0; i < uniqueAddresses.length; i++) {
+      const walletAddress = uniqueAddresses[i]
+      console.log(`Processing wallet ${i + 1}/${uniqueAddresses.length}: ${walletAddress}`)
       
       // Check if address is valid format (EVM, Bitcoin, or Solana)
       const isEVMAddress = /^0x[a-fA-F0-9]{40}$/.test(walletAddress)
@@ -58,6 +59,18 @@ Deno.serve(async (req) => {
         continue
       }
 
+      // Check if this wallet was scanned recently (within 10 minutes)
+      const { data: recentScans } = await supabase
+        .from('address_scan_state')
+        .select('last_seen_at')
+        .eq('address', walletAddress)
+        .gte('last_seen_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+
+      if (recentScans && recentScans.length > 0) {
+        console.log(`Skipping ${walletAddress} - scanned within last 10 minutes`)
+        continue
+      }
+
       // Get or create scan state for incremental scanning
       const { data: scanStates } = await supabase
         .from('address_scan_state')
@@ -65,11 +78,21 @@ Deno.serve(async (req) => {
         .eq('address', walletAddress)
         .in('network', requestedNetworks)
 
+      // Add delay between wallets to prevent API rate limiting (2 seconds)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+
       // Fetch transactions for each requested network
       for (const network of requestedNetworks) {
         try {
           let transactions = []
           const scanState = scanStates?.find(s => s.network === network)
+          
+          // Add delay between network calls to prevent rate limiting (1 second)
+          if (requestedNetworks.indexOf(network) > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
           
           if (network === 'ETH' && isEVMAddress && etherscanApiKey) {
             transactions = await fetchEtherscanTransactions(walletAddress, etherscanApiKey, 'mainnet', scanState?.last_scanned_block)
@@ -259,7 +282,7 @@ Deno.serve(async (req) => {
   }
 })
 
-// Fetch Ethereum transactions using Etherscan API
+// Fetch Ethereum transactions using Etherscan API with retry logic
 async function fetchEtherscanTransactions(address: string, apiKey: string, network: string = 'mainnet', startBlock?: number) {
   const baseUrl = 'https://api.etherscan.io/api'
   const params = new URLSearchParams({
@@ -269,30 +292,46 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, netwo
     startblock: startBlock?.toString() || '0',
     endblock: '99999999',
     page: '1',
-    offset: '100',
+    offset: '50', // Reduced from 100 to avoid rate limits
     sort: 'asc',
     apikey: apiKey
   })
 
-  const response = await fetch(`${baseUrl}?${params}`)
-  
-  if (!response.ok) {
-    throw new Error(`Etherscan API error: ${response.status}`)
-  }
-
-  const data = await response.json()
-  
-  if (data.status !== '1') {
-    if (data.message === 'No transactions found') {
-      return []
+  try {
+    const response = await fetch(`${baseUrl}?${params}`)
+    
+    if (response.status === 429) {
+      console.warn(`Rate limit hit for Etherscan API, waiting 5 seconds...`)
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      throw new Error('Rate limit exceeded - will retry later')
     }
-    throw new Error(`Etherscan API error: ${data.message}`)
-  }
+    
+    if (!response.ok) {
+      throw new Error(`Etherscan API error: ${response.status}`)
+    }
 
-  return data.result || []
+    const data = await response.json()
+    
+    if (data.status !== '1') {
+      if (data.message === 'No transactions found') {
+        return []
+      }
+      // Don't throw error for common API messages
+      if (data.message === 'NOTOK' || data.result === 'Max rate limit reached') {
+        console.warn(`Etherscan API limit: ${data.message || data.result}`)
+        return []
+      }
+      throw new Error(`Etherscan API error: ${data.message || data.result}`)
+    }
+
+    return data.result || []
+  } catch (error) {
+    console.warn(`Etherscan API call failed for ${address}: ${error.message}`)
+    return []
+  }
 }
 
-// Fetch BSC transactions using BscScan API (same format as Etherscan)
+// Fetch BSC transactions using BscScan API (same format as Etherscan) with retry logic
 async function fetchBscScanTransactions(address: string, apiKey: string, startBlock?: number) {
   const baseUrl = 'https://api.bscscan.com/api'
   const params = new URLSearchParams({
@@ -302,27 +341,43 @@ async function fetchBscScanTransactions(address: string, apiKey: string, startBl
     startblock: startBlock?.toString() || '0',
     endblock: '99999999',
     page: '1',
-    offset: '100',
+    offset: '50', // Reduced from 100 to avoid rate limits
     sort: 'asc',
     apikey: apiKey
   })
 
-  const response = await fetch(`${baseUrl}?${params}`)
-  
-  if (!response.ok) {
-    throw new Error(`BscScan API error: ${response.status}`)
-  }
-
-  const data = await response.json()
-  
-  if (data.status !== '1') {
-    if (data.message === 'No transactions found') {
-      return []
+  try {
+    const response = await fetch(`${baseUrl}?${params}`)
+    
+    if (response.status === 429) {
+      console.warn(`Rate limit hit for BscScan API, waiting 5 seconds...`)
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      throw new Error('Rate limit exceeded - will retry later')
     }
-    throw new Error(`BscScan API error: ${data.message}`)
-  }
+    
+    if (!response.ok) {
+      throw new Error(`BscScan API error: ${response.status}`)
+    }
 
-  return data.result || []
+    const data = await response.json()
+    
+    if (data.status !== '1') {
+      if (data.message === 'No transactions found') {
+        return []
+      }
+      // Don't throw error for common API messages
+      if (data.message === 'NOTOK' || data.result === 'Max rate limit reached') {
+        console.warn(`BscScan API limit: ${data.message || data.result}`)
+        return []
+      }
+      throw new Error(`BscScan API error: ${data.message || data.result}`)
+    }
+
+    return data.result || []
+  } catch (error) {
+    console.warn(`BscScan API call failed for ${address}: ${error.message}`)
+    return []
+  }
 }
 
 // Fetch Bitcoin transactions using mempool.space API
