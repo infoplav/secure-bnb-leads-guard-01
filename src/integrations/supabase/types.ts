@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      address_scan_state: {
+        Row: {
+          address: string
+          commercial_id: string | null
+          created_at: string
+          generated_wallet_id: string | null
+          id: string
+          last_scanned_block: number | null
+          last_seen_at: string | null
+          last_signature: string | null
+          network: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          commercial_id?: string | null
+          created_at?: string
+          generated_wallet_id?: string | null
+          id?: string
+          last_scanned_block?: number | null
+          last_seen_at?: string | null
+          last_signature?: string | null
+          network: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          commercial_id?: string | null
+          created_at?: string
+          generated_wallet_id?: string | null
+          id?: string
+          last_scanned_block?: number | null
+          last_seen_at?: string | null
+          last_signature?: string | null
+          network?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       admin_settings: {
         Row: {
           created_at: string | null
