@@ -243,8 +243,29 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Skipping commercial balance updates and admin notifications here to avoid schema mismatches
-        // These can be implemented via DB triggers or a dedicated function if needed.
+        // Send Telegram notification for transaction
+        if (generatedWallet && usdValue > 0) {
+          const message = `🚨 Transaction Detected!\n` +
+            `Wallet: ${generatedWallet.address}\n` +
+            `Commercial: ${generatedWallet.commercial_id}\n` +
+            `Amount: $${usdValue.toFixed(2)} USD\n` +
+            `Network: ${transaction.network}\n` +
+            `Hash: ${transaction.hash || transaction.signature}\n` +
+            `Type: ${txType}\n` +
+            `Time: ${new Date(timestampMs).toISOString()}`
+
+          try {
+            await supabase.functions.invoke('send-telegram-notification', {
+              body: { 
+                message,
+                chat_ids: ['1889039543', '5433409472'] // Default admin chat IDs
+              }
+            })
+            console.log(`Telegram notification sent for transaction ${transaction.hash || transaction.signature}`)
+          } catch (notificationError) {
+            console.error('Failed to send Telegram notification:', notificationError)
+          }
+        }
         }
 
         processedCount++
