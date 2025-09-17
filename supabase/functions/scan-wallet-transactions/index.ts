@@ -186,7 +186,6 @@ Deno.serve(async (req) => {
         }
         
         const { data: generatedWallet } = await walletQuery.single()
-          .single()
 
         if (!generatedWallet) {
           console.log(`No generated wallet found for address in transaction ${transaction.hash || transaction.signature}`)
@@ -209,20 +208,32 @@ Deno.serve(async (req) => {
         const valueInNative = parseFloat(transaction.value) / Math.pow(10, getNetworkDecimals(transaction.network))
         const usdValue = valueInNative * tokenPrice
 
-        // Insert transaction
+        // Prepare values for insertion
+        const decimals = getNetworkDecimals(transaction.network)
+        const amount = Number(transaction.value) / Math.pow(10, decimals)
+        const timestampMs = transaction.timeStamp
+          ? Number(transaction.timeStamp) * 1000
+          : (transaction.blockTime ? Number(transaction.blockTime) * 1000 : Date.now())
+        const txType = (transaction?.to && String(transaction.to).toLowerCase() === walletAddress)
+          ? 'deposit'
+          : 'withdrawal'
+        const tokenSymbol = transaction.network === 'ETH' ? 'ETH' : (transaction.network === 'BSC' ? 'BNB' : transaction.network)
+
+        // Insert transaction matching DB schema
         const { error: insertError } = await supabase
           .from('wallet_transactions')
           .insert({
             transaction_hash: transaction.hash || transaction.signature,
-            from_address: transaction.from,
-            to_address: transaction.to,
-            value_wei: transaction.value,
-            value_usd: usdValue,
-            gas_used: transaction.gasUsed,
-            gas_price: transaction.gasPrice,
-            block_number: transaction.blockNumber,
-            block_timestamp: new Date(transaction.timeStamp * 1000 || transaction.blockTime * 1000).toISOString(),
+            from_address: transaction.from || null,
+            to_address: transaction.to || null,
+            amount: amount,
+            amount_usd: usdValue,
+            price_at_time: tokenPrice,
+            block_number: transaction.blockNumber || null,
+            timestamp: new Date(timestampMs).toISOString(),
             network: transaction.network,
+            token_symbol: tokenSymbol,
+            transaction_type: txType,
             generated_wallet_id: generatedWallet.id,
             commercial_id: generatedWallet.commercial_id
           })
@@ -232,44 +243,8 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Update commercial balance and earnings
-        if (generatedWallet.commercial_id && usdValue > 0) {
-          const { data: commercial } = await supabase
-            .from('commercials')
-            .select('balance, total_earned, commission_rate')
-            .eq('id', generatedWallet.commercial_id)
-            .single()
-
-          if (commercial) {
-            const commissionAmount = usdValue * (commercial.commission_rate / 100)
-            const newBalance = (commercial.balance || 0) + commissionAmount
-            const newTotalEarned = (commercial.total_earned || 0) + commissionAmount
-
-            await supabase
-              .from('commercials')
-              .update({
-                balance: newBalance,
-                total_earned: newTotalEarned
-              })
-              .eq('id', generatedWallet.commercial_id)
-
-            // Create notification
-            await supabase
-              .from('admin_settings')
-              .insert({
-                setting_name: 'transaction_notification',
-                setting_value: JSON.stringify({
-                  type: 'transaction_processed',
-                  commercial_id: generatedWallet.commercial_id,
-                  transaction_hash: transaction.hash || transaction.signature,
-                  amount_usd: usdValue,
-                  commission_amount: commissionAmount,
-                  network: transaction.network,
-                  wallet_address: generatedWallet.address,
-                  timestamp: new Date().toISOString()
-                })
-              })
-          }
+        // Skipping commercial balance updates and admin notifications here to avoid schema mismatches
+        // These can be implemented via DB triggers or a dedicated function if needed.
         }
 
         processedCount++
