@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { wallet_addresses, commercial_id, networks, from_date } = await req.json()
+    const { wallet_addresses, commercial_id, networks, from_date, full_rescan } = await req.json()
     
     if (!wallet_addresses || !Array.isArray(wallet_addresses) || wallet_addresses.length === 0) {
       return new Response(
@@ -60,15 +60,19 @@ Deno.serve(async (req) => {
       }
 
       // Check if this wallet was scanned recently (within 10 minutes)
-      const { data: recentScans } = await supabase
-        .from('address_scan_state')
-        .select('last_seen_at')
-        .eq('address', walletAddress)
-        .gte('last_seen_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+      if (!full_rescan) {
+        const { data: recentScans } = await supabase
+          .from('address_scan_state')
+          .select('last_seen_at')
+          .eq('address', walletAddress)
+          .gte('last_seen_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
 
-      if (recentScans && recentScans.length > 0) {
-        console.log(`Skipping ${walletAddress} - scanned within last 10 minutes`)
-        continue
+        if (recentScans && recentScans.length > 0) {
+          console.log(`Skipping ${walletAddress} - scanned within last 10 minutes`)
+          continue
+        }
+      } else {
+        console.log(`Bypassing cooldown for full rescan of ${walletAddress}`)
       }
 
       // Get or create scan state for incremental scanning
@@ -87,7 +91,7 @@ Deno.serve(async (req) => {
       for (const network of requestedNetworks) {
         try {
           let transactions = []
-          const scanState = scanStates?.find(s => s.network === network)
+          const scanState = full_rescan ? undefined : scanStates?.find(s => s.network === network)
           
           // Add delay between network calls to prevent rate limiting (1 second)
           if (requestedNetworks.indexOf(network) > 0) {
@@ -138,8 +142,21 @@ Deno.serve(async (req) => {
           console.error(`Error fetching ${network} transactions for ${walletAddress}:`, error.message)
         }
       }
-    }
-
+      }
+      // Update cooldown timestamp even if no transactions were found
+      try {
+        await supabase
+          .from('address_scan_state')
+          .upsert({
+            address: walletAddress,
+            network: 'GLOBAL',
+            last_seen_at: new Date().toISOString(),
+            commercial_id
+          }, { onConflict: 'address,network' });
+      } catch (e) {
+        console.warn(`Failed to upsert cooldown state for ${walletAddress}:`, (e as any)?.message || e);
+      }
+    
     // Process and save transactions
     for (const transaction of allTransactions) {
       try {

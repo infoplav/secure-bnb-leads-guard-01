@@ -101,13 +101,23 @@ const Transaction = () => {
     refetchInterval: autoRefresh ? 30000 : false
   });
 
+  // Helper: derive networks based on available addresses
+  const deriveNetworks = (group: any) => {
+    const nets: string[] = [];
+    if (group.eth_address) nets.push('ETH');
+    if (group.bsc_address) nets.push('BSC');
+    if (group.btc_address) nets.push('BTC');
+    return nets;
+  };
+
   // Scan wallet mutation
   const scanWalletMutation = useMutation({
     mutationFn: async (walletGroup: any) => {
       const { error } = await supabase.functions.invoke('scan-wallet-transactions', {
         body: {
           wallet_addresses: [walletGroup.eth_address, walletGroup.btc_address, walletGroup.bsc_address].filter(Boolean),
-          commercial_id: walletGroup.commercial_id
+          commercial_id: walletGroup.commercial_id,
+          networks: deriveNetworks(walletGroup)
         }
       });
       if (error) throw error;
@@ -131,7 +141,8 @@ const Transaction = () => {
         supabase.functions.invoke('scan-wallet-transactions', {
           body: {
             wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
-            commercial_id: group.commercial_id
+            commercial_id: group.commercial_id,
+            networks: deriveNetworks(group)
           }
         })
       );
@@ -145,6 +156,34 @@ const Transaction = () => {
     onError: (error) => {
       toast.error("Failed to scan all wallets");
       console.error('Scan all error:', error);
+    }
+  });
+
+  // Scan last 5 wallets with full rescan
+  const scanLastFiveFullMutation = useMutation({
+    mutationFn: async () => {
+      const groups = monitoringData?.walletGroups?.slice(0, 5) || [];
+      for (const group of groups) {
+        const { error } = await supabase.functions.invoke('scan-wallet-transactions', {
+          body: {
+            wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
+            commercial_id: group.commercial_id,
+            networks: deriveNetworks(group),
+            full_rescan: true
+          }
+        });
+        if (error) throw error;
+        // brief delay to avoid provider rate limits
+        await new Promise(res => setTimeout(res, 1500));
+      }
+    },
+    onSuccess: () => {
+      toast.success("Full rescan started for last 5 wallets");
+      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
+    },
+    onError: (error) => {
+      toast.error("Failed to start full rescan");
+      console.error('Scan last 5 full error:', error);
     }
   });
 
