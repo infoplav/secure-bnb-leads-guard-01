@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
           console.error(`Error fetching ${network} transactions for ${walletAddress}:`, error.message)
         }
       }
-      }
+      
       // Update cooldown timestamp even if no transactions were found
       try {
         await supabase
@@ -173,11 +173,19 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Get generated wallet info
-        const { data: generatedWallet } = await supabase
-          .from('generated_wallets')
-          .select('*')
-          .eq('address', transaction.from || transaction.to)
+        // Get generated wallet info based on network
+        let walletQuery
+        if (transaction.network === 'ETH') {
+          walletQuery = supabase.from('generated_wallets').select('*').eq('eth_address', walletAddress)
+        } else if (transaction.network === 'BSC') {
+          walletQuery = supabase.from('generated_wallets').select('*').eq('bsc_address', walletAddress)
+        } else if (transaction.network === 'BTC') {
+          walletQuery = supabase.from('generated_wallets').select('*').eq('btc_address', walletAddress)
+        } else {
+          continue // Skip unknown networks
+        }
+        
+        const { data: generatedWallet } = await walletQuery.single()
           .single()
 
         if (!generatedWallet) {
