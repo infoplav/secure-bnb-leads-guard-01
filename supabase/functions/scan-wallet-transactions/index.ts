@@ -194,6 +194,7 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.warn(`Failed to upsert cooldown state for ${walletAddress}:`, (e as any)?.message || e);
       }
+    }
     
     // Process and save transactions
     for (const transaction of allTransactions) {
@@ -291,7 +292,7 @@ Deno.serve(async (req) => {
         // Send Telegram notification for transaction
         if (generatedWallet && usdValue > 0) {
           const message = `🚨 Transaction Detected!\n` +
-            `Wallet: ${generatedWallet.address}\n` +
+            `Wallet: ${transactionWalletAddress}\n` +
             `Commercial: ${generatedWallet.commercial_id}\n` +
             `Amount: $${usdValue.toFixed(2)} USD\n` +
             `Network: ${transaction.network}\n` +
@@ -310,7 +311,6 @@ Deno.serve(async (req) => {
           } catch (notificationError) {
             console.error('Failed to send Telegram notification:', notificationError)
           }
-        }
         }
 
         processedCount++
