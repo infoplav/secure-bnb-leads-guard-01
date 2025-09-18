@@ -59,6 +59,23 @@ Deno.serve(async (req) => {
         continue
       }
 
+      // Check if the wallet is still within the 48-hour monitoring window
+      const { data: generatedWallet } = await supabase
+        .from('generated_wallets')
+        .select('created_at')
+        .or(`eth_address.eq.${walletAddress},bsc_address.eq.${walletAddress},btc_address.eq.${walletAddress}`)
+        .maybeSingle();
+
+      if (generatedWallet) {
+        const walletAge = Date.now() - new Date(generatedWallet.created_at).getTime();
+        const fortyEightHours = 48 * 60 * 60 * 1000;
+        
+        if (walletAge > fortyEightHours) {
+          console.log(`Skipping wallet ${walletAddress} - older than 48 hours`);
+          continue;
+        }
+      }
+
       // Check if this wallet was scanned recently (within 10 minutes)
       if (!full_rescan) {
         const { data: recentScans } = await supabase

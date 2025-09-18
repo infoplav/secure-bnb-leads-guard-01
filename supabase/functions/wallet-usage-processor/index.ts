@@ -40,6 +40,63 @@ serve(async (req) => {
     const processedCount = notifications?.length || 0;
     console.log(`Found ${processedCount} notifications to process`);
 
+    // Clean up wallets older than 48 hours
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    
+    try {
+      // Delete old generated wallets and related data
+      const { data: expiredWallets, error: fetchExpiredError } = await supabase
+        .from('generated_wallets')
+        .select('id, eth_address, bsc_address, btc_address, wallet_id')
+        .lt('created_at', fortyEightHoursAgo.toISOString());
+
+      if (fetchExpiredError) {
+        console.error('Error fetching expired wallets:', fetchExpiredError);
+      } else if (expiredWallets && expiredWallets.length > 0) {
+        console.log(`Found ${expiredWallets.length} expired wallets to clean up`);
+        
+        for (const wallet of expiredWallets) {
+          // Delete address scan states
+          const addresses = [wallet.eth_address, wallet.bsc_address, wallet.btc_address].filter(Boolean);
+          if (addresses.length > 0) {
+            await supabase
+              .from('address_scan_state')
+              .delete()
+              .in('address', addresses);
+          }
+          
+          // Delete wallet transactions
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('generated_wallet_id', wallet.id);
+            
+          // Delete the generated wallet
+          await supabase
+            .from('generated_wallets')
+            .delete()
+            .eq('id', wallet.id);
+            
+          // If it has a wallet_id, mark the original wallet as available again
+          if (wallet.wallet_id) {
+            await supabase
+              .from('wallets')
+              .update({ 
+                status: 'available',
+                used_by_commercial_id: null,
+                used_at: null,
+                client_tracking_id: null
+              })
+              .eq('id', wallet.wallet_id);
+          }
+        }
+        
+        console.log(`Cleaned up ${expiredWallets.length} expired wallets`);
+      }
+    } catch (cleanupError) {
+      console.error('Error during wallet cleanup:', cleanupError);
+    }
+
     for (const notification of notifications || []) {
       try {
         // Atomically claim the notification to avoid double-processing
