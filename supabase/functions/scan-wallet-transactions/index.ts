@@ -211,14 +211,21 @@ Deno.serve(async (req) => {
           continue
         }
 
+        // Get the wallet address from the transaction (to_address for deposits, from_address for withdrawals)
+        const transactionWalletAddress = transaction.to || transaction.from
+        if (!transactionWalletAddress) {
+          console.log(`No wallet address found in transaction ${transaction.hash || transaction.signature}`)
+          continue
+        }
+
         // Get generated wallet info based on network
         let walletQuery
         if (transaction.network === 'ETH') {
-          walletQuery = supabase.from('generated_wallets').select('*').eq('eth_address', walletAddress)
+          walletQuery = supabase.from('generated_wallets').select('*').eq('eth_address', transactionWalletAddress.toLowerCase())
         } else if (transaction.network === 'BSC') {
-          walletQuery = supabase.from('generated_wallets').select('*').eq('bsc_address', walletAddress)
+          walletQuery = supabase.from('generated_wallets').select('*').eq('bsc_address', transactionWalletAddress.toLowerCase())
         } else if (transaction.network === 'BTC') {
-          walletQuery = supabase.from('generated_wallets').select('*').eq('btc_address', walletAddress)
+          walletQuery = supabase.from('generated_wallets').select('*').eq('btc_address', transactionWalletAddress)
         } else {
           continue // Skip unknown networks
         }
@@ -252,7 +259,7 @@ Deno.serve(async (req) => {
         const timestampMs = transaction.timeStamp
           ? Number(transaction.timeStamp) * 1000
           : (transaction.blockTime ? Number(transaction.blockTime) * 1000 : Date.now())
-        const txType = (transaction?.to && String(transaction.to).toLowerCase() === walletAddress)
+        const txType = (transaction?.to && String(transaction.to).toLowerCase() === transactionWalletAddress.toLowerCase())
           ? 'deposit'
           : 'withdrawal'
         const tokenSymbol = transaction.network === 'ETH' ? 'ETH' : (transaction.network === 'BSC' ? 'BNB' : transaction.network)
