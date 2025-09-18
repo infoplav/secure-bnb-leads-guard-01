@@ -18,7 +18,17 @@ const Transaction = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [autoScan, setAutoScan] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const queryClient = useQueryClient();
+
+  // Update time every minute for countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto refresh every 30 seconds if enabled
   useEffect(() => {
@@ -46,7 +56,7 @@ const Transaction = () => {
   const { data: monitoringData, isLoading, refetch } = useQuery({
     queryKey: ['monitoring-data'],
     queryFn: async () => {
-      const [gwRes, txRes, walletsRes, commercialsRes] = await Promise.all([
+      const [gwRes, txRes, walletsRes, commercialsRes, scanStateRes] = await Promise.all([
         supabase
           .from('generated_wallets')
           .select('id, eth_address, btc_address, bsc_address, created_at, is_monitoring_active, commercial_id, wallet_id')
@@ -60,17 +70,23 @@ const Transaction = () => {
           .select('id, wallet_phrase, client_tracking_id, status, used_at, last_balance_check, client_balance, used_by_commercial_id'),
         supabase
           .from('commercials')
-          .select('id, name')
+          .select('id, name'),
+        supabase
+          .from('address_scan_state')
+          .select('address, network, last_seen_at, commercial_id')
+          .eq('network', 'GLOBAL')
       ]);
 
       if (gwRes.error) throw gwRes.error;
       if (txRes.error) throw txRes.error;
       if (walletsRes.error) throw walletsRes.error;
       if (commercialsRes.error) throw commercialsRes.error;
+      if (scanStateRes.error) throw scanStateRes.error;
 
       const walletsMap = new Map((walletsRes.data || []).map((w: any) => [w.id, w]));
       const commercialsMap = new Map((commercialsRes.data || []).map((c: any) => [c.id, c]));
       const gwById = new Map((gwRes.data || []).map((g: any) => [g.id, g]));
+      const scanStateMap = new Map((scanStateRes.data || []).map((s: any) => [s.address, s]));
 
       const txByGwId = new Map<string, any[]>();
       (txRes.data || []).forEach((tx: any) => {
@@ -80,12 +96,29 @@ const Transaction = () => {
         txByGwId.set(tx.generated_wallet_id, arr);
       });
 
-      const walletGroups = (gwRes.data || []).map((g: any) => ({
-        ...g,
-        _wallet: g.wallet_id ? walletsMap.get(g.wallet_id) : undefined,
-        _commercial: g.commercial_id ? commercialsMap.get(g.commercial_id) : undefined,
-        _transactions: txByGwId.get(g.id) || []
-      }));
+      const walletGroups = (gwRes.data || []).map((g: any) => {
+        // Find the most recent scan state for any address of this wallet
+        const addresses = [g.eth_address, g.bsc_address, g.btc_address].filter(Boolean);
+        let lastScanTime = null;
+        
+        addresses.forEach(addr => {
+          const scanState = scanStateMap.get(addr.toLowerCase());
+          if (scanState && scanState.last_seen_at) {
+            const scanTime = new Date(scanState.last_seen_at);
+            if (!lastScanTime || scanTime > lastScanTime) {
+              lastScanTime = scanTime;
+            }
+          }
+        });
+
+        return {
+          ...g,
+          _wallet: g.wallet_id ? walletsMap.get(g.wallet_id) : undefined,
+          _commercial: g.commercial_id ? commercialsMap.get(g.commercial_id) : undefined,
+          _transactions: txByGwId.get(g.id) || [],
+          _lastScanTime: lastScanTime
+        };
+      });
 
       const allTransactions = (txRes.data || []).map((tx: any) => {
         const g = tx.generated_wallet_id ? gwById.get(tx.generated_wallet_id) : undefined;
@@ -366,6 +399,22 @@ const Transaction = () => {
     });
   };
 
+  // Calculate remaining monitoring time for used wallets
+  const getMonitoringTimeLeft = (usedAt: string) => {
+    if (!usedAt) return null;
+    
+    const usedDate = new Date(usedAt);
+    const monitoringEndDate = new Date(usedDate.getTime() + (48 * 60 * 60 * 1000)); // 48 hours
+    const timeLeft = monitoringEndDate.getTime() - currentTime.getTime();
+    
+    if (timeLeft <= 0) return "Monitoring ended";
+    
+    const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${hours}h ${minutes}min`;
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -637,8 +686,9 @@ const Transaction = () => {
 
                           <div className="flex items-center justify-between pt-2 border-t">
                             <div className="text-sm text-muted-foreground">
-                              Last check: {group._wallet?.last_balance_check ? 
-                                formatTimeAgo(group._wallet.last_balance_check) : 'Never'}
+                              Last scan: {group._lastScanTime ? 
+                                formatTimeAgo(group._lastScanTime.toISOString()) : 
+                                (group._wallet?.last_balance_check ? formatTimeAgo(group._wallet.last_balance_check) : 'Never')}
                             </div>
                             {lastTransaction && (
                               <div className="text-sm text-muted-foreground">
@@ -647,6 +697,16 @@ const Transaction = () => {
                               </div>
                             )}
                           </div>
+
+                          {/* Monitoring countdown for used wallets */}
+                          {group._wallet?.used_at && group._wallet?.status === 'used' && (
+                            <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-200">
+                              <Clock className="w-4 h-4 text-blue-600" />
+                              <span className="text-blue-800 font-medium">
+                                Time left monitoring: {getMonitoringTimeLeft(group._wallet.used_at)}
+                              </span>
+                            </div>
+                          )}
 
                           {/* Recent transactions preview */}
                           {group._transactions?.length > 0 && (
