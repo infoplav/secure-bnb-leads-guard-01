@@ -138,8 +138,8 @@ Deno.serve(async (req) => {
             await new Promise(resolve => setTimeout(resolve, 1000))
           }
           
-          if (network === 'ETH' && isEVMAddress && alchemyApiKey) {
-            transactions = await fetchAlchemyTransactions(walletAddress, alchemyApiKey, 'mainnet', scanState?.last_scanned_block)
+          if (network === 'ETH' && isEVMAddress && moralisApiKey) {
+            transactions = await fetchMoralisTransactions(walletAddress, moralisApiKey, 'eth', scanState?.last_scanned_block)
           } else if (network === 'BSC' && isEVMAddress && moralisApiKey) {
             transactions = await fetchMoralisTransactions(walletAddress, moralisApiKey, 'bsc', scanState?.last_scanned_block)
           } else if (network === 'BTC' && isBitcoinAddress && blockCypherApiKey) {
