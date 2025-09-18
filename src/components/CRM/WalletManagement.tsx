@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter } from 'lucide-react';
+import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 
 const WalletManagement = () => {
@@ -18,8 +18,34 @@ const WalletManagement = () => {
   const [dateTo, setDateTo] = useState('');
   const [idTypeFilter, setIdTypeFilter] = useState<'all' | 'email' | 'complex'>('all');
   const [selectedWallets, setSelectedWallets] = useState<string[]>([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Update time every minute for countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate remaining monitoring time
+  const getMonitoringTimeLeft = (usedAt: string) => {
+    if (!usedAt) return null;
+    
+    const usedDate = new Date(usedAt);
+    const monitoringEndDate = new Date(usedDate.getTime() + (48 * 60 * 60 * 1000)); // 48 hours
+    const timeLeft = monitoringEndDate.getTime() - currentTime.getTime();
+    
+    if (timeLeft <= 0) return "Monitoring ended";
+    
+    const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${hours}h ${minutes}min`;
+  };
 
   // Fetch wallets
   const { data: wallets, isLoading } = useQuery({
@@ -481,6 +507,14 @@ const WalletManagement = () => {
                       )}
                       {wallet.used_at && (
                         <p>Used at: {format(new Date(wallet.used_at), 'PPp')}</p>
+                      )}
+                      {wallet.used_at && wallet.status === 'used' && (
+                        <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-200">
+                          <Clock className="w-4 h-4 text-blue-600" />
+                          <span className="text-blue-800 font-medium">
+                            Time left monitoring: {getMonitoringTimeLeft(wallet.used_at)}
+                          </span>
+                        </div>
                       )}
                       {wallet.client_balance !== null && (
                         <p>Client Balance: {wallet.client_balance}</p>
