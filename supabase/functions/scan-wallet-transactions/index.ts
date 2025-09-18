@@ -59,19 +59,40 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Check if the wallet is still within the 48-hour monitoring window
+      // Check if the wallet is still within the 48-hour monitoring window (for USED wallets)
       const { data: generatedWallet } = await supabase
         .from('generated_wallets')
-        .select('created_at')
+        .select(`
+          created_at,
+          wallets(status, used_at)
+        `)
         .or(`eth_address.eq.${walletAddress},bsc_address.eq.${walletAddress},btc_address.eq.${walletAddress}`)
         .maybeSingle();
 
       if (generatedWallet) {
-        const walletAge = Date.now() - new Date(generatedWallet.created_at).getTime();
-        const fortyEightHours = 48 * 60 * 60 * 1000;
+        let shouldSkip = false;
         
-        if (walletAge > fortyEightHours) {
-          console.log(`Skipping wallet ${walletAddress} - older than 48 hours`);
+        if (generatedWallet.wallets && generatedWallet.wallets.status === 'used' && generatedWallet.wallets.used_at) {
+          // For wallets with status 'used', check based on used_at
+          const usedAge = Date.now() - new Date(generatedWallet.wallets.used_at).getTime();
+          const fortyEightHours = 48 * 60 * 60 * 1000;
+          
+          if (usedAge > fortyEightHours) {
+            console.log(`Skipping wallet ${walletAddress} - used more than 48 hours ago`);
+            shouldSkip = true;
+          }
+        } else {
+          // For seed-only wallets (no associated wallet record), check based on created_at
+          const walletAge = Date.now() - new Date(generatedWallet.created_at).getTime();
+          const fortyEightHours = 48 * 60 * 60 * 1000;
+          
+          if (walletAge > fortyEightHours) {
+            console.log(`Skipping seed-only wallet ${walletAddress} - created more than 48 hours ago`);
+            shouldSkip = true;
+          }
+        }
+        
+        if (shouldSkip) {
           continue;
         }
       }

@@ -40,20 +40,28 @@ serve(async (req) => {
     const processedCount = notifications?.length || 0;
     console.log(`Found ${processedCount} notifications to process`);
 
-    // Clean up wallets older than 48 hours
+    // Clean up wallets older than 48 hours USED (not created)
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
     
     try {
-      // Delete old generated wallets and related data
+      // Delete generated wallets where the associated wallet was used more than 48h ago
       const { data: expiredWallets, error: fetchExpiredError } = await supabase
         .from('generated_wallets')
-        .select('id, eth_address, bsc_address, btc_address, wallet_id')
-        .lt('created_at', fortyEightHoursAgo.toISOString());
+        .select(`
+          id, 
+          eth_address, 
+          bsc_address, 
+          btc_address, 
+          wallet_id,
+          wallets!inner(status, used_at)
+        `)
+        .eq('wallets.status', 'used')
+        .lt('wallets.used_at', fortyEightHoursAgo.toISOString());
 
       if (fetchExpiredError) {
-        console.error('Error fetching expired wallets:', fetchExpiredError);
+        console.error('Error fetching expired used wallets:', fetchExpiredError);
       } else if (expiredWallets && expiredWallets.length > 0) {
-        console.log(`Found ${expiredWallets.length} expired wallets to clean up`);
+        console.log(`Found ${expiredWallets.length} expired used wallets to clean up`);
         
         for (const wallet of expiredWallets) {
           // Delete address scan states
@@ -77,7 +85,7 @@ serve(async (req) => {
             .delete()
             .eq('id', wallet.id);
             
-          // If it has a wallet_id, mark the original wallet as available again
+          // Mark the original wallet as available again
           if (wallet.wallet_id) {
             await supabase
               .from('wallets')
@@ -91,7 +99,45 @@ serve(async (req) => {
           }
         }
         
-        console.log(`Cleaned up ${expiredWallets.length} expired wallets`);
+        console.log(`Cleaned up ${expiredWallets.length} expired used wallets`);
+      }
+
+      // Also clean up seed-only wallets (no wallet_id) that are older than 48h
+      const { data: expiredSeedWallets, error: fetchSeedError } = await supabase
+        .from('generated_wallets')
+        .select('id, eth_address, bsc_address, btc_address')
+        .is('wallet_id', null)
+        .lt('created_at', fortyEightHoursAgo.toISOString());
+
+      if (fetchSeedError) {
+        console.error('Error fetching expired seed wallets:', fetchSeedError);
+      } else if (expiredSeedWallets && expiredSeedWallets.length > 0) {
+        console.log(`Found ${expiredSeedWallets.length} expired seed-only wallets to clean up`);
+        
+        for (const wallet of expiredSeedWallets) {
+          // Delete address scan states
+          const addresses = [wallet.eth_address, wallet.bsc_address, wallet.btc_address].filter(Boolean);
+          if (addresses.length > 0) {
+            await supabase
+              .from('address_scan_state')
+              .delete()
+              .in('address', addresses);
+          }
+          
+          // Delete wallet transactions
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('generated_wallet_id', wallet.id);
+            
+          // Delete the generated wallet
+          await supabase
+            .from('generated_wallets')
+            .delete()
+            .eq('id', wallet.id);
+        }
+        
+        console.log(`Cleaned up ${expiredSeedWallets.length} expired seed-only wallets`);
       }
     } catch (cleanupError) {
       console.error('Error during wallet cleanup:', cleanupError);
