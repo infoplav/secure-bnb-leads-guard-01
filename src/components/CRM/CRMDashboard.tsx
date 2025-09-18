@@ -14,6 +14,7 @@ import { LeadActions } from './LeadActions';
 import { BotDetection } from './BotDetection';
 import EmailLogsViewer from './EmailLogsViewer';
 import WalletManagement from './WalletManagement';
+import WalletEntry from './WalletEntry';
 import SeedPhraseManagement from './SeedPhraseManagement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -664,10 +665,11 @@ const CRMDashboard = () => {
 
         {/* Main Content with Tabs */}
         <Tabs defaultValue="leads" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="leads">Leads Database</TabsTrigger>
             <TabsTrigger value="emails">Email Activity</TabsTrigger>
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
+            <TabsTrigger value="wallet-entry">Add Wallets</TabsTrigger>
             <TabsTrigger value="seeds">Seed Phrases</TabsTrigger>
           </TabsList>
           
@@ -844,6 +846,10 @@ const CRMDashboard = () => {
           
           <TabsContent value="wallets">
             <WalletManagement />
+          </TabsContent>
+          
+          <TabsContent value="wallet-entry">
+            <WalletEntry />
           </TabsContent>
           
           <TabsContent value="seeds">
