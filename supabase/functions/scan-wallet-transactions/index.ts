@@ -26,7 +26,9 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const etherscanApiKey = Deno.env.get('ETHERSCAN_API_KEY')
+    const alchemyApiKey = Deno.env.get('ALCHEMY_API_KEY')
+    const moralisApiKey = Deno.env.get('MORALIS_API_KEY')
+    const blockCypherApiKey = Deno.env.get('BLOCKCYPHER_API_KEY')
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -136,12 +138,12 @@ Deno.serve(async (req) => {
             await new Promise(resolve => setTimeout(resolve, 1000))
           }
           
-          if (network === 'ETH' && isEVMAddress && etherscanApiKey) {
-            transactions = await fetchEtherscanTransactions(walletAddress, etherscanApiKey, 'mainnet', scanState?.last_scanned_block)
-          } else if (network === 'BSC' && isEVMAddress && etherscanApiKey) {
-            transactions = await fetchBscScanTransactions(walletAddress, etherscanApiKey, scanState?.last_scanned_block)
-          } else if (network === 'BTC' && isBitcoinAddress) {
-            transactions = await fetchBitcoinTransactions(walletAddress, scanState?.last_seen_at)
+          if (network === 'ETH' && isEVMAddress && alchemyApiKey) {
+            transactions = await fetchAlchemyTransactions(walletAddress, alchemyApiKey, 'mainnet', scanState?.last_scanned_block)
+          } else if (network === 'BSC' && isEVMAddress && moralisApiKey) {
+            transactions = await fetchMoralisTransactions(walletAddress, moralisApiKey, 'bsc', scanState?.last_scanned_block)
+          } else if (network === 'BTC' && isBitcoinAddress && blockCypherApiKey) {
+            transactions = await fetchBlockCypherTransactions(walletAddress, blockCypherApiKey, scanState?.last_seen_at)
           } else if (network === 'SOL' && isSolanaAddress) {
             transactions = await fetchSolanaTransactions(walletAddress, scanState?.last_signature)
           } else {
@@ -348,131 +350,165 @@ Deno.serve(async (req) => {
   }
 })
 
-// Fetch Ethereum transactions using Etherscan API with retry logic
-async function fetchEtherscanTransactions(address: string, apiKey: string, network: string = 'mainnet', startBlock?: number) {
-  const baseUrl = 'https://api.etherscan.io/api'
-  const params = new URLSearchParams({
-    module: 'account',
-    action: 'txlist',
-    address,
-    startblock: startBlock?.toString() || '0',
-    endblock: '99999999',
-    page: '1',
-    offset: '50', // Reduced from 100 to avoid rate limits
-    sort: 'asc',
-    apikey: apiKey
-  })
-
+// Fetch Ethereum transactions using Alchemy API
+async function fetchAlchemyTransactions(address: string, apiKey: string, network: string = 'mainnet', startBlock?: number) {
+  const baseUrl = `https://eth-${network}.g.alchemy.com/v2/${apiKey}`
+  
   try {
-    const response = await fetch(`${baseUrl}?${params}`)
+    const body = {
+      id: 1,
+      jsonrpc: "2.0",
+      method: "alchemy_getAssetTransfers",
+      params: [{
+        fromBlock: startBlock ? `0x${startBlock.toString(16)}` : "0x0",
+        toBlock: "latest",
+        fromAddress: address,
+        toAddress: address,
+        category: ["external", "internal"],
+        maxCount: "0x32", // 50 transactions
+        withMetadata: true,
+        excludeZeroValue: false
+      }]
+    }
+
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(body)
+    })
     
     if (response.status === 429) {
-      console.warn(`Rate limit hit for Etherscan API, waiting 5 seconds...`)
+      console.warn(`Rate limit hit for Alchemy API, waiting 5 seconds...`)
       await new Promise(resolve => setTimeout(resolve, 5000))
       throw new Error('Rate limit exceeded - will retry later')
     }
     
     if (!response.ok) {
-      throw new Error(`Etherscan API error: ${response.status}`)
+      throw new Error(`Alchemy API error: ${response.status}`)
     }
 
     const data = await response.json()
     
-    if (data.status !== '1') {
-      if (data.message === 'No transactions found') {
-        return []
-      }
-      // Don't throw error for common API messages
-      if (data.message === 'NOTOK' || data.result === 'Max rate limit reached') {
-        console.warn(`Etherscan API limit: ${data.message || data.result}`)
-        return []
-      }
-      throw new Error(`Etherscan API error: ${data.message || data.result}`)
+    if (data.error) {
+      console.warn(`Alchemy API error: ${data.error.message}`)
+      return []
     }
 
-    return data.result || []
+    // Convert Alchemy format to expected format
+    const transfers = data.result?.transfers || []
+    return transfers.map((transfer: any) => ({
+      hash: transfer.hash,
+      from: transfer.from,
+      to: transfer.to,
+      value: transfer.value ? (parseFloat(transfer.value) * Math.pow(10, 18)).toString() : '0',
+      timeStamp: transfer.metadata?.blockTimestamp ? new Date(transfer.metadata.blockTimestamp).getTime() / 1000 : Date.now() / 1000,
+      blockNumber: transfer.blockNum ? parseInt(transfer.blockNum, 16) : 0
+    }))
   } catch (error) {
-    console.warn(`Etherscan API call failed for ${address}: ${error.message}`)
+    console.warn(`Alchemy API call failed for ${address}: ${error.message}`)
     return []
   }
 }
 
-// Fetch BSC transactions using BscScan API (same format as Etherscan) with retry logic
-async function fetchBscScanTransactions(address: string, apiKey: string, startBlock?: number) {
-  const baseUrl = 'https://api.bscscan.com/api'
-  const params = new URLSearchParams({
-    module: 'account',
-    action: 'txlist',
-    address,
-    startblock: startBlock?.toString() || '0',
-    endblock: '99999999',
-    page: '1',
-    offset: '50', // Reduced from 100 to avoid rate limits
-    sort: 'asc',
-    apikey: apiKey
-  })
-
+// Fetch BSC transactions using Moralis API
+async function fetchMoralisTransactions(address: string, apiKey: string, chain: string = 'bsc', startBlock?: number) {
+  const chainParam = chain === 'bsc' ? '0x38' : '0x1'
+  const baseUrl = `https://deep-index.moralis.io/api/v2.2/${address}`
+  
   try {
-    const response = await fetch(`${baseUrl}?${params}`)
+    const params = new URLSearchParams({
+      chain: chainParam,
+      limit: '50'
+    })
+    
+    if (startBlock) {
+      params.append('from_block', startBlock.toString())
+    }
+
+    const response = await fetch(`${baseUrl}?${params}`, {
+      headers: {
+        'X-API-Key': apiKey,
+        'Accept': 'application/json'
+      }
+    })
     
     if (response.status === 429) {
-      console.warn(`Rate limit hit for BscScan API, waiting 5 seconds...`)
+      console.warn(`Rate limit hit for Moralis API, waiting 5 seconds...`)
       await new Promise(resolve => setTimeout(resolve, 5000))
       throw new Error('Rate limit exceeded - will retry later')
     }
     
     if (!response.ok) {
-      throw new Error(`BscScan API error: ${response.status}`)
+      throw new Error(`Moralis API error: ${response.status}`)
     }
 
     const data = await response.json()
     
-    if (data.status !== '1') {
-      if (data.message === 'No transactions found') {
-        return []
-      }
-      // Don't throw error for common API messages
-      if (data.message === 'NOTOK' || data.result === 'Max rate limit reached') {
-        console.warn(`BscScan API limit: ${data.message || data.result}`)
-        return []
-      }
-      throw new Error(`BscScan API error: ${data.message || data.result}`)
-    }
-
-    return data.result || []
+    // Convert Moralis format to expected format
+    const transactions = data.result || []
+    return transactions.map((tx: any) => ({
+      hash: tx.hash,
+      from: tx.from_address,
+      to: tx.to_address,
+      value: tx.value || '0',
+      timeStamp: new Date(tx.block_timestamp).getTime() / 1000,
+      blockNumber: parseInt(tx.block_number)
+    }))
   } catch (error) {
-    console.warn(`BscScan API call failed for ${address}: ${error.message}`)
+    console.warn(`Moralis API call failed for ${address}: ${error.message}`)
     return []
   }
 }
 
-// Fetch Bitcoin transactions using mempool.space API
-async function fetchBitcoinTransactions(address: string, lastSeenAt?: string) {
-  const baseUrl = 'https://mempool.space/api/address'
-  const response = await fetch(`${baseUrl}/${address}/txs`)
+// Fetch Bitcoin transactions using BlockCypher API
+async function fetchBlockCypherTransactions(address: string, apiKey: string, lastSeenAt?: string) {
+  const baseUrl = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/full`
   
-  if (!response.ok) {
-    throw new Error(`Mempool.space API error: ${response.status}`)
-  }
+  try {
+    const params = new URLSearchParams({
+      token: apiKey,
+      limit: '50'
+    })
 
-  const transactions = await response.json()
-  
-  // Filter by last seen timestamp if provided
-  if (lastSeenAt) {
-    const lastSeenTimestamp = new Date(lastSeenAt).getTime() / 1000
-    return transactions.filter((tx: any) => tx.status.block_time > lastSeenTimestamp)
-  }
+    const response = await fetch(`${baseUrl}?${params}`)
+    
+    if (response.status === 429) {
+      console.warn(`Rate limit hit for BlockCypher API, waiting 5 seconds...`)
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      throw new Error('Rate limit exceeded - will retry later')
+    }
+    
+    if (!response.ok) {
+      throw new Error(`BlockCypher API error: ${response.status}`)
+    }
 
-  return transactions.map((tx: any) => ({
-    hash: tx.txid,
-    from: tx.vin[0]?.prevout?.scriptpubkey_address || '',
-    to: tx.vout[0]?.scriptpubkey_address || '',
-    value: tx.vout.reduce((sum: number, output: any) => sum + output.value, 0).toString(),
-    blockNumber: tx.status.block_height,
-    timeStamp: tx.status.block_time,
-    gasUsed: tx.fee,
-    gasPrice: '0'
-  }))
+    const data = await response.json()
+    const transactions = data.txs || []
+    
+    // Filter by last seen timestamp if provided
+    if (lastSeenAt) {
+      const lastSeenTimestamp = new Date(lastSeenAt).getTime() / 1000
+      return transactions.filter((tx: any) => new Date(tx.confirmed).getTime() / 1000 > lastSeenTimestamp)
+    }
+
+    return transactions.map((tx: any) => ({
+      hash: tx.hash,
+      from: tx.inputs[0]?.addresses?.[0] || '',
+      to: tx.outputs[0]?.addresses?.[0] || '',
+      value: tx.outputs.reduce((sum: number, output: any) => sum + (output.value || 0), 0).toString(),
+      blockNumber: tx.block_height || 0,
+      timeStamp: tx.confirmed ? new Date(tx.confirmed).getTime() / 1000 : Date.now() / 1000,
+      gasUsed: tx.fees || 0,
+      gasPrice: '0'
+    }))
+  } catch (error) {
+    console.warn(`BlockCypher API call failed for ${address}: ${error.message}`)
+    return []
+  }
+}
 }
 
 // Fetch Solana transactions using public RPC
