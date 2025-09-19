@@ -220,6 +220,25 @@ const Transaction = () => {
     }
   });
 
+  // Regenerate Bitcoin addresses mutation
+  const regenerateBitcoinMutation = useMutation({
+    mutationFn: async () => {
+      console.log('Triggering Bitcoin address regeneration...');
+      const { data, error } = await supabase.functions.invoke('regenerate-bitcoin-addresses');
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      console.log('Bitcoin regeneration completed:', data);
+      toast.success(`Regenerated Bitcoin addresses for ${data.processed} wallets`);
+      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
+    },
+    onError: (error: any) => {
+      console.error('Bitcoin regeneration failed:', error);
+      toast.error(`Failed to regenerate Bitcoin addresses: ${error.message}`);
+    },
+  });
+
   // Scan last 5 wallets with full rescan
   const scanLastFiveFullMutation = useMutation({
     mutationFn: async () => {
@@ -471,14 +490,23 @@ const Transaction = () => {
               <Play className={`w-4 h-4 mr-2 ${autoScan ? 'text-green-600' : ''}`} />
               {autoScan ? 'Auto Scan ON' : 'Auto Scan OFF'}
             </Button>
-            <Button
-              variant="outline"
+            <Button 
+              variant="outline" 
               size="sm"
               onClick={() => monitorUsedWalletsMutation.mutate()}
               disabled={monitorUsedWalletsMutation.isPending}
             >
               <Wallet2 className={`w-4 h-4 mr-2 ${monitorUsedWalletsMutation.isPending ? 'animate-spin' : ''}`} />
               Monitor Used
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => regenerateBitcoinMutation.mutate()}
+              disabled={regenerateBitcoinMutation.isPending}
+            >
+              <Activity className={`w-4 h-4 mr-2 ${regenerateBitcoinMutation.isPending ? 'animate-spin' : ''}`} />
+              Fix BTC
             </Button>
             <Button variant="outline" onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" />

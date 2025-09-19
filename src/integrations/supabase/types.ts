@@ -325,7 +325,7 @@ export type Database = {
       generated_wallets: {
         Row: {
           bsc_address: string
-          btc_address: string
+          btc_address: string | null
           client_tracking_id: string | null
           commercial_id: string
           created_at: string
@@ -337,7 +337,7 @@ export type Database = {
         }
         Insert: {
           bsc_address: string
-          btc_address: string
+          btc_address?: string | null
           client_tracking_id?: string | null
           commercial_id: string
           created_at?: string
@@ -349,7 +349,7 @@ export type Database = {
         }
         Update: {
           bsc_address?: string
-          btc_address?: string
+          btc_address?: string | null
           client_tracking_id?: string | null
           commercial_id?: string
           created_at?: string
@@ -817,6 +817,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      regenerate_bitcoin_addresses: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       set_commercial_offline: {
         Args: { commercial_id: string }
