@@ -727,7 +727,9 @@ Tracking: ${trackingCode}`
       tracking_code: trackingCode,
       email_id: emailResponse.data?.id,
       recipient: to,
-      server_ip_used: currentServerIp
+      server_ip_used: currentServerIp,
+      method_used: sendMethod,
+      from_used: fromDomain
     }), {
       status: 200,
       headers: {
