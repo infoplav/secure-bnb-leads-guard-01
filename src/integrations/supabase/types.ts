@@ -152,6 +152,8 @@ export type Database = {
           balance: number | null
           commission_rate: number | null
           created_at: string | null
+          email_alias_from: string | null
+          email_domain_preference: string | null
           id: string
           is_forced_logout: boolean | null
           language: string
@@ -176,6 +178,8 @@ export type Database = {
           balance?: number | null
           commission_rate?: number | null
           created_at?: string | null
+          email_alias_from?: string | null
+          email_domain_preference?: string | null
           id?: string
           is_forced_logout?: boolean | null
           language?: string
@@ -200,6 +204,8 @@ export type Database = {
           balance?: number | null
           commission_rate?: number | null
           created_at?: string | null
+          email_alias_from?: string | null
+          email_domain_preference?: string | null
           id?: string
           is_forced_logout?: boolean | null
           language?: string

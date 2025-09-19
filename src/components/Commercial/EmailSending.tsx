@@ -24,7 +24,6 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
   const [name, setName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
-  const [selectedDomain, setSelectedDomain] = useState<'domain1' | 'domain2'>('domain1');
   // Step is automatically determined by email template
 
   // Fetch all available templates
@@ -122,7 +121,6 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         commercial_id: String(commercial.id),
         subject: tpl.subject,
         content: tpl.content,
-        domain: selectedDomain,
         ...(wallet ? { wallet } : {}),
         step: step,
       };
@@ -217,17 +215,20 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="domain">Domaine d'envoi</Label>
-              <Select value={selectedDomain} onValueChange={(v) => setSelectedDomain(v as 'domain1' | 'domain2')}>
-                <SelectTrigger id="domain" className="bg-gray-700 border-gray-600 text-white">
-                  <SelectValue placeholder="Choisir un domaine" />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700 text-white">
-                  <SelectItem value="domain1">Domaine 1</SelectItem>
-                  <SelectItem value="domain2">Domaine 2</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Email Configuration Info */}
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <p className="text-sm text-blue-300">
+                <strong>Configuration d'envoi:</strong> {
+                  commercial.email_domain_preference === 'alias' ? 
+                    `Alias - ${commercial.email_alias_from || 'do_not_reply@mailersp2.binance.com'}` :
+                  commercial.email_domain_preference === 'domain2' ? 
+                    'Domaine 2 - mailersrp-2binance.com' : 
+                    'Domaine 1 - mailersrp-1binance.com'
+                }
+              </p>
+              <p className="text-xs text-blue-400 mt-1">
+                Modifiez dans Configuration Email si nécessaire
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

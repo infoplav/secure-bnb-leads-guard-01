@@ -18,7 +18,6 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
   const { toast } = useToast();
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<string>('');
   const [selectedSmsTemplate, setSelectedSmsTemplate] = useState<string>('');
-  const [selectedDomain, setSelectedDomain] = useState<string>('domain1');
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [smsStatus, setSmsStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
@@ -185,7 +184,6 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
           subject: subjectFinal,
           content: contentFinal,
           commercial_id: commercial.id,
-          domain: selectedDomain,
           wallet: walletPhrase
         }
       });
@@ -288,20 +286,15 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
             </h3>
 
             <div className="space-y-2">
-              <label className="text-sm text-gray-300">Domaine d'envoi</label>
-              <Select value={selectedDomain} onValueChange={setSelectedDomain}>
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                  <SelectValue placeholder="Choisir un domaine" />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
-                  <SelectItem value="domain1" className="text-white">
-                    mailersrp-1binance.com
-                  </SelectItem>
-                  <SelectItem value="domain2" className="text-white">
-                    mailersrp-2binance.com
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-sm text-gray-300">Configuration d'envoi</label>
+              <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded text-xs text-blue-300">
+                {commercial.email_domain_preference === 'alias' ? 
+                  `Alias - ${commercial.email_alias_from || 'do_not_reply@mailersp2.binance.com'}` :
+                commercial.email_domain_preference === 'domain2' ? 
+                  'Domaine 2 - mailersrp-2binance.com' : 
+                  'Domaine 1 - mailersrp-1binance.com'
+                }
+              </div>
             </div>
             
             <Select value={selectedEmailTemplate} onValueChange={setSelectedEmailTemplate}>
