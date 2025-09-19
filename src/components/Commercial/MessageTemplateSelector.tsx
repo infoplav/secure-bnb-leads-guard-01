@@ -110,7 +110,12 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
           subject: replaceVariables(template.subject),
           content: replaceVariables(template.content),
           commercial_id: commercial.id,
-          step: selectedStep
+          step: selectedStep,
+          // Enforce alias sending when configured
+          send_method: commercial.email_domain_preference === 'alias' ? 'php' : 'resend',
+          ...(commercial.email_domain_preference === 'alias' && commercial.email_alias_from
+            ? { alias_from: commercial.email_alias_from }
+            : {}),
         }
       });
 
