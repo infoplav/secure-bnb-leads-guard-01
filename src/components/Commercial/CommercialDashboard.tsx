@@ -343,6 +343,10 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
       <EmailConfiguration
         commercial={commercial}
         onBack={() => setActiveView('dashboard')}
+        onConfigUpdate={(updatedCommercial) => {
+          // Update the commercial data in the parent component
+          Object.assign(commercial, updatedCommercial);
+        }}
       />
     );
   }

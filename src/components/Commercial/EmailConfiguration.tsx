@@ -12,9 +12,10 @@ import { useMutation } from '@tanstack/react-query';
 interface EmailConfigurationProps {
   commercial: any;
   onBack: () => void;
+  onConfigUpdate?: (updatedCommercial: any) => void;
 }
 
-const EmailConfiguration = ({ commercial, onBack }: EmailConfigurationProps) => {
+const EmailConfiguration = ({ commercial, onBack, onConfigUpdate }: EmailConfigurationProps) => {
   const { toast } = useToast();
   const [emailDomain, setEmailDomain] = useState(commercial.email_domain_preference || 'domain1');
   const [aliasFrom, setAliasFrom] = useState(commercial.email_alias_from || 'do_not_reply@mailersp2.binance.com');
@@ -33,6 +34,16 @@ const EmailConfiguration = ({ commercial, onBack }: EmailConfigurationProps) => 
         title: "Configuration email mise à jour",
         description: "Votre configuration d'envoi d'emails a été sauvegardée avec succès.",
       });
+      
+      // Update the commercial object in the parent component
+      if (onConfigUpdate) {
+        onConfigUpdate({
+          ...commercial,
+          email_domain_preference: emailDomain,
+          email_alias_from: aliasFrom
+        });
+      }
+      
       onBack();
     },
     onError: (error) => {
