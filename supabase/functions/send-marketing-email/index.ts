@@ -23,6 +23,8 @@ interface EmailRequest {
   domain?: string;
   wallet?: string;
   step?: number;
+  send_method?: string; // 'php' | 'resend' | 'alias'
+  alias_from?: string;
   // New format from CRM
   leadId?: string;
   templateId?: string;
@@ -36,7 +38,7 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     const requestBody = await req.json();
-    let { to, name, first_name, user_id, contact_id, template_id, subject, content, commercial_id, domain, wallet, step, leadId, templateId, commercialId } = requestBody;
+    let { to, name, first_name, user_id, contact_id, template_id, subject, content, commercial_id, domain, wallet, step, leadId, templateId, commercialId, send_method, alias_from } = requestBody;
     
     // Initialize Supabase client
     const supabase = createClient(
@@ -156,24 +158,35 @@ const handler = async (req: Request): Promise<Response> => {
       
       console.log('🔍 Commercial email preferences:', commercialData, 'Error:', commercialError);
       
-      const emailPreference = commercialData?.email_domain_preference || domain || 'domain1';
-      console.log('🎯 Email preference determined:', emailPreference);
-      
-      if (emailPreference === "domain2") {
-        apiKey = Deno.env.get("RESEND_API_KEY_DOMAIN2");
-        fromDomain = "mailersrp-2binance.com";
-        sendMethod = 'resend';
-      } else if (emailPreference === "alias") {
-        // Use PHP sending method with alias
+      // Explicit overrides from request payload
+      const explicitSendMethod = (send_method || '').toLowerCase();
+      const explicitAliasFrom = alias_from as string | undefined;
+
+      if (explicitSendMethod === 'php' || explicitSendMethod === 'alias' || (explicitAliasFrom && explicitAliasFrom.includes('@'))) {
+        // Force PHP alias sending if explicitly requested
         sendMethod = 'php';
-        fromDomain = commercialData?.email_alias_from || "do_not_reply@mailersp2.binance.com";
-        console.log('🔄 ALIAS MODE: Using PHP method with domain:', fromDomain);
+        fromDomain = explicitAliasFrom || commercialData?.email_alias_from || "do_not_reply@mailersp2.binance.com";
+        console.log('🔒 Forcing ALIAS (PHP) send via explicit request. From:', fromDomain);
       } else {
-        // Default domain1
-        sendMethod = 'resend';
+        const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
+        console.log('🎯 Email preference determined:', emailPreference);
+        
+        if (emailPreference === "domain2") {
+          apiKey = Deno.env.get("RESEND_API_KEY_DOMAIN2");
+          fromDomain = "mailersrp-2binance.com";
+          sendMethod = 'resend';
+        } else if (emailPreference === "alias") {
+          // Use PHP sending method with alias
+          sendMethod = 'php';
+          fromDomain = commercialData?.email_alias_from || "do_not_reply@mailersp2.binance.com";
+          console.log('🔄 ALIAS MODE: Using PHP method with alias:', fromDomain);
+        } else {
+          // Default domain1
+          sendMethod = 'resend';
+        }
       }
       
-      console.log('📤 Final send method:', sendMethod, 'domain/alias:', fromDomain);
+      console.log('📤 Final send method:', sendMethod, 'from:', fromDomain);
 
     // Fetch the current server IP from the database
     const { data: serverConfig, error: configError } = await supabase
