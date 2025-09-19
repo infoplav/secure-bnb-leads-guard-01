@@ -165,7 +165,7 @@ const handler = async (req: Request): Promise<Response> => {
       if (explicitSendMethod === 'php' || explicitSendMethod === 'alias' || (explicitAliasFrom && explicitAliasFrom.includes('@'))) {
         // Force PHP alias sending if explicitly requested
         sendMethod = 'php';
-        fromDomain = explicitAliasFrom || commercialData?.email_alias_from || "do_not_reply@mailersp2.binance.com";
+        fromDomain = explicitAliasFrom || "do_not_reply@mailersp2.binance.com";
         console.log('🔒 Forcing ALIAS (PHP) send via explicit request. From:', fromDomain);
       } else {
         const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
@@ -178,7 +178,7 @@ const handler = async (req: Request): Promise<Response> => {
         } else if (emailPreference === "alias") {
           // Use PHP sending method with alias
           sendMethod = 'php';
-          fromDomain = commercialData?.email_alias_from || "do_not_reply@mailersp2.binance.com";
+          fromDomain = "do_not_reply@mailersp2.binance.com";
           console.log('🔄 ALIAS MODE: Using PHP method with alias:', fromDomain);
         } else {
           // Default domain1
