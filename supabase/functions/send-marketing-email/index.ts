@@ -144,10 +144,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-      // Select API key and domain based on commercial's preference
-      let apiKey = Deno.env.get("RESEND_API_KEY"); // Default domain 1
-      let fromDomain = "mailersrp-1binance.com";
-      let sendMethod = 'resend'; // default method
+      // Select sending method and From based on commercial's preference
+      let apiKey = Deno.env.get("RESEND_API_KEY"); // kept for potential explicit resend
+      let fromDomain = "donotreply@mailersrp-1binance.com"; // default From (owned domain)
+      let sendMethod = 'php'; // default to PHP to eliminate 'via'
       
       // Get commercial's email preferences
       const { data: commercialData, error: commercialError } = await supabase
@@ -172,17 +172,18 @@ const handler = async (req: Request): Promise<Response> => {
         console.log('🎯 Email preference determined:', emailPreference);
         
         if (emailPreference === "domain2") {
-          apiKey = Deno.env.get("RESEND_API_KEY_DOMAIN2");
-          fromDomain = "mailersrp-2binance.com";
-          sendMethod = 'resend';
+          // Use our domain2 identity via PHP to avoid 'via'
+          fromDomain = "noreply@mailersrp-2binance.com";
+          sendMethod = 'php';
         } else if (emailPreference === "alias") {
           // Use PHP sending method with alias
           sendMethod = 'php';
           fromDomain = "do_not_reply@mailersp2.binance.com";
           console.log('🔄 ALIAS MODE: Using PHP method with alias:', fromDomain);
         } else {
-          // Default domain1
-          sendMethod = 'resend';
+          // Default domain1 via PHP
+          fromDomain = "donotreply@mailersrp-1binance.com";
+          sendMethod = 'php';
         }
       }
       
@@ -492,7 +493,8 @@ const handler = async (req: Request): Promise<Response> => {
           message: emailContent,
           from_email: fromDomain,
           from_name: senderName,
-          tracking_code: trackingCode
+          tracking_code: trackingCode,
+          envelope_from: fromDomain
         };
         
         console.log('📤 PHP payload:', phpPayload);
@@ -502,7 +504,7 @@ const handler = async (req: Request): Promise<Response> => {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
-          body: new URLSearchParams(phpPayload).toString()
+          body: new URLSearchParams(phpPayload as Record<string, string>).toString()
         });
         
         console.log('📬 PHP response status:', phpResponse.status, phpResponse.statusText);
@@ -529,11 +531,9 @@ const handler = async (req: Request): Promise<Response> => {
         resend = new Resend(apiKey);
       }
       
-      emailResponse = await resend.emails.send({
-        from: fromDomain === "mailersrp-2binance.com" 
-          ? `${senderName} <noreply@mailersrp-2binance.com>`
-          : `${senderName} <donotreply@mailersrp-1binance.com>`,
-        to: [to],
+        emailResponse = await resend.emails.send({
+          from: `${senderName} <${fromDomain}>`,
+          to: [to],
         subject: emailSubject,
         html: emailContent,
         tags: [
