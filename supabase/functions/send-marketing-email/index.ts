@@ -112,7 +112,7 @@ const handler = async (req: Request): Promise<Response> => {
       content = templateData.content;
       commercial_id = commercialId;
       domain = domain || 'domain1'; // Default domain if not provided
-      // Derive step from template name if not provided (Email1, Email2, Email3)
+      // Derive step from template name if not provided (Email1, Email2, etc)
       if (!step && (templateData as any)?.name) {
         const m = String((templateData as any).name).match(/(\d+)/);
         if (m) {
@@ -362,7 +362,6 @@ const handler = async (req: Request): Promise<Response> => {
       .includes('ledger');
 
     // Only process wallet placeholders if they exist in the content
-    // Use wallets for step 3 (Email3) or Trust Wallet templates with auto_include_wallet enabled
     console.log('Checking if email content contains wallet placeholders...');
     
     // First check commercial's auto_include_wallet setting
@@ -384,17 +383,13 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
     
-    // Always include wallets for step 3 (Email3) and Trust Wallet templates
-    const walletPlaceholdersDetected = step === 3 || isTrustWalletTemplate;
+    // Check if wallet placeholders exist in email content or subject
+    const walletPlaceholdersDetected = hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject);
     let walletWasUsed = false;
     let uniqueWallet = ''; // Store the wallet for Telegram notification
     
     if (walletPlaceholdersDetected) {
-      if (step === 3) {
-        console.log('Email3 detected (step 3), processing wallet replacements...');
-      } else if (isTrustWalletTemplate) {
-        console.log('Trust Wallet template with auto_include_wallet enabled, processing wallet...');
-      }
+      console.log('Wallet placeholders detected in email content, processing wallet replacements...');
       
       // Normalize braces and invisible spaces, then replace wallet placeholders
       const normalizeBraces = (s: string) => s
