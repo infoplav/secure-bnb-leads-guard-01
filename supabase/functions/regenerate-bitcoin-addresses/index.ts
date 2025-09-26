@@ -34,8 +34,8 @@ function generateBitcoinAddress(seedPhrase: string): string {
     const sha256Hash = sha256(pubKey);
     const hash160 = ripemd160(sha256Hash);
     
-    // Convert to bech32 address with 'bc' prefix (mainnet)
-    const words = bech32.toWords(hash160);
+    // Convert to bech32 address with 'bc' prefix (mainnet) and witness version 0
+    const words = [0, ...bech32.toWords(hash160)];
     const address = bech32.encode('bc', words);
     
     console.log(`Generated Bitcoin address: ${address} for seed phrase hash: ${seedPhrase.slice(0,10)}...`);

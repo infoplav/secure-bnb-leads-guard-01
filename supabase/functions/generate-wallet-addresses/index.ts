@@ -4,6 +4,7 @@ import { mnemonicToSeedSync } from "https://esm.sh/@scure/bip39@1.2.1";
 import { HDKey } from "https://esm.sh/@scure/bip32@1.3.2";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.4.0/sha256";
 import { ripemd160 } from "https://esm.sh/@noble/hashes@1.4.0/ripemd160";
+import { keccak_256 } from "https://esm.sh/@noble/hashes@1.4.0/sha3";
 import { bech32 } from "https://esm.sh/@scure/base@1.1.3";
 
 const corsHeaders = {
@@ -31,8 +32,8 @@ function generateBitcoinAddress(seedPhrase: string): string {
     const sha256Hash = sha256(pubKey);
     const hash160 = ripemd160(sha256Hash);
     
-    // Convert to bech32 address with 'bc' prefix (mainnet)
-    const words = bech32.toWords(hash160);
+    // Convert to bech32 address with 'bc' prefix (mainnet) and witness version 0
+    const words = [0, ...bech32.toWords(hash160)];
     const address = bech32.encode('bc', words);
     
     return address;
@@ -59,8 +60,8 @@ function generateEthereumAddress(seedPhrase: string): string {
     // Get uncompressed public key (remove first byte)
     const uncompressedPubKey = derivedKey.publicKey.slice(1);
     
-    // Ethereum address is last 20 bytes of hash
-    const hash = sha256(uncompressedPubKey);
+    // Ethereum address is last 20 bytes of keccak256 hash of public key
+    const hash = keccak_256(uncompressedPubKey);
     const addressBytes = hash.slice(-20);
     
     // Convert to hex with 0x prefix
