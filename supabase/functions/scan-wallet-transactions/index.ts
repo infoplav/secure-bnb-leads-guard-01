@@ -508,8 +508,6 @@ async function fetchBlockCypherTransactions(address: string, apiKey: string, las
     console.warn(`BlockCypher API call failed for ${address}: ${error.message}`)
     return []
   }
-}
-}
 
 // Fetch Solana transactions using public RPC
 async function fetchSolanaTransactions(address: string, lastSignature?: string) {

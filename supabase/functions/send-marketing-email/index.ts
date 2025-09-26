@@ -1,9 +1,20 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "npm:resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.2";
 
-// Initialize Resend with default API key
-let resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+// Initialize Resend dynamically to avoid build issues
+let resend: any = null;
+
+async function getResend() {
+  if (!resend) {
+    try {
+      const { Resend } = await import("https://esm.sh/resend@2.0.0");
+      resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    } catch (error) {
+      console.error("Failed to initialize Resend:", error);
+    }
+  }
+  return resend;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -522,11 +533,12 @@ const handler = async (req: Request): Promise<Response> => {
     } else {
       console.log('📨 USING RESEND METHOD...');
       // Send via Resend API
-      if (!resend) {
-        resend = new Resend(apiKey);
+      const resendClient = await getResend();
+      if (!resendClient) {
+        throw new Error('Failed to initialize Resend client');
       }
       
-        emailResponse = await resend.emails.send({
+        emailResponse = await resendClient.emails.send({
           from: `${senderName} <${fromDomain}>`,
           to: [to],
         subject: emailSubject,
