@@ -2,64 +2,49 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.2";
 import { mnemonicToSeedSync } from "https://esm.sh/@scure/bip39@1.2.1";
 import { HDKey } from "https://esm.sh/@scure/bip32@1.3.2";
+import { sha256 } from "https://esm.sh/@noble/hashes@1.4.0/sha256";
+import { ripemd160 } from "https://esm.sh/@noble/hashes@1.4.0/ripemd160";
+import { bech32 } from "https://esm.sh/@scure/base@1.1.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Bitcoin P2WPKH address generation
+// Proper Bitcoin P2WPKH address generation using real crypto
 function generateBitcoinAddress(seedPhrase: string): string {
   try {
+    // Convert mnemonic to seed
     const seed = mnemonicToSeedSync(seedPhrase);
+    
+    // Create HD wallet from seed
     const hdkey = HDKey.fromMasterSeed(seed);
     
     // BIP84 derivation path for P2WPKH: m/84'/0'/0'/0/0
     const derivedKey = hdkey.derive("m/84'/0'/0'/0/0");
     
     if (!derivedKey.publicKey) {
-      throw new Error("Failed to derive public key");
+      throw new Error("Failed to derive public key from seed phrase");
     }
     
-    // Generate bech32 address
+    // Get compressed public key (33 bytes)
     const pubKey = derivedKey.publicKey;
-    const hash160 = sha256ripemd160(pubKey);
     
-    return encodeBech32('bc', hash160);
-  } catch (error) {
+    // Create hash160: RIPEMD160(SHA256(pubkey))
+    const sha256Hash = sha256(pubKey);
+    const hash160 = ripemd160(sha256Hash);
+    
+    // Convert to bech32 address with 'bc' prefix (mainnet)
+    const words = bech32.toWords(hash160);
+    const address = bech32.encode('bc', words);
+    
+    console.log(`Generated Bitcoin address: ${address} for seed phrase hash: ${seedPhrase.slice(0,10)}...`);
+    return address;
+    
+  } catch (error: any) {
     console.error("Bitcoin address generation failed:", error);
-    // Fallback to a deterministic address based on seed phrase hash
-    const hash = new TextEncoder().encode(seedPhrase);
-    const hashArray = Array.from(new Uint8Array(hash.slice(0, 20)));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 34);
-    return `bc1q${hashHex}`;
+    throw new Error(`Failed to generate Bitcoin address: ${error?.message || 'Unknown error'}`);
   }
-}
-
-// Simplified crypto functions
-function sha256ripemd160(data: Uint8Array): Uint8Array {
-  // Simplified implementation - in production, use proper crypto libraries
-  const encoder = new TextEncoder();
-  const hashInput = encoder.encode(Array.from(data).join(''));
-  return new Uint8Array(20).map((_, i) => hashInput[i % hashInput.length] || 0);
-}
-
-function encodeBech32(prefix: string, data: Uint8Array): string {
-  // Simplified bech32 encoding - in production, use proper library
-  const chars = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
-  let result = prefix + '1';
-  
-  // Convert data to base32
-  const base32Data = [];
-  for (let i = 0; i < data.length; i++) {
-    base32Data.push(data[i] % 32);
-  }
-  
-  for (const val of base32Data) {
-    result += chars[val];
-  }
-  
-  return result.slice(0, 62); // Limit length
 }
 
 serve(async (req) => {
@@ -95,12 +80,12 @@ serve(async (req) => {
       try {
         processed++;
         
-        // Generate new Bitcoin address from seed phrase
+        // Generate new Bitcoin address from seed phrase using PROPER cryptography
         const newBtcAddress = generateBitcoinAddress(wallet.seed_phrase);
         
-        // Only update if address is different or invalid
+        // Always update if address is different, invalid, or truncated
         if (wallet.btc_address !== newBtcAddress || 
-            !wallet.btc_address?.startsWith('bc1q') || 
+            !wallet.btc_address?.startsWith('bc1') || 
             wallet.btc_address?.length < 40) {
           
           const { error: updateError } = await supabase

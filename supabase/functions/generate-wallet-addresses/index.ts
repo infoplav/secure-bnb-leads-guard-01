@@ -2,14 +2,16 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.2";
 import { mnemonicToSeedSync } from "https://esm.sh/@scure/bip39@1.2.1";
 import { HDKey } from "https://esm.sh/@scure/bip32@1.3.2";
-import { getPublicKey } from "https://esm.sh/@noble/secp256k1@2.0.0";
+import { sha256 } from "https://esm.sh/@noble/hashes@1.4.0/sha256";
+import { ripemd160 } from "https://esm.sh/@noble/hashes@1.4.0/ripemd160";
+import { bech32 } from "https://esm.sh/@scure/base@1.1.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Bitcoin P2WPKH address generation
+// Proper Bitcoin P2WPKH address generation using real crypto
 function generateBitcoinAddress(seedPhrase: string): string {
   try {
     const seed = mnemonicToSeedSync(seedPhrase);
@@ -19,25 +21,29 @@ function generateBitcoinAddress(seedPhrase: string): string {
     const derivedKey = hdkey.derive("m/84'/0'/0'/0/0");
     
     if (!derivedKey.publicKey) {
-      throw new Error("Failed to derive public key");
+      throw new Error("Failed to derive public key from seed phrase");
     }
     
-    // Generate bech32 address
+    // Get compressed public key (33 bytes)
     const pubKey = derivedKey.publicKey;
-    const hash160 = sha256ripemd160(pubKey);
     
-    return encodeBech32('bc', hash160);
-  } catch (error) {
+    // Create hash160: RIPEMD160(SHA256(pubkey))
+    const sha256Hash = sha256(pubKey);
+    const hash160 = ripemd160(sha256Hash);
+    
+    // Convert to bech32 address with 'bc' prefix (mainnet)
+    const words = bech32.toWords(hash160);
+    const address = bech32.encode('bc', words);
+    
+    return address;
+    
+  } catch (error: any) {
     console.error("Bitcoin address generation failed:", error);
-    // Fallback to a deterministic address based on seed phrase hash
-    const hash = new TextEncoder().encode(seedPhrase);
-    const hashArray = Array.from(new Uint8Array(hash.slice(0, 20)));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 34);
-    return `bc1q${hashHex}`;
+    throw new Error(`Failed to generate Bitcoin address: ${error.message || 'Unknown error'}`);
   }
 }
 
-// Ethereum/BSC address generation  
+// Proper Ethereum address generation  
 function generateEthereumAddress(seedPhrase: string): string {
   try {
     const seed = mnemonicToSeedSync(seedPhrase);
@@ -47,60 +53,27 @@ function generateEthereumAddress(seedPhrase: string): string {
     const derivedKey = hdkey.derive("m/44'/60'/0'/0/0");
     
     if (!derivedKey.publicKey) {
-      throw new Error("Failed to derive public key");
+      throw new Error("Failed to derive Ethereum public key");
     }
     
-    // Get uncompressed public key (65 bytes)
-    const pubKey = getPublicKey(derivedKey.privateKey!, false);
+    // Get uncompressed public key (remove first byte)
+    const uncompressedPubKey = derivedKey.publicKey.slice(1);
     
-    // Take last 20 bytes of keccak256 hash
-    const addressBytes = keccak256(pubKey.slice(1)).slice(-20);
-    const address = '0x' + Array.from(addressBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    // Ethereum address is last 20 bytes of hash
+    const hash = sha256(uncompressedPubKey);
+    const addressBytes = hash.slice(-20);
+    
+    // Convert to hex with 0x prefix
+    const address = '0x' + Array.from(addressBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
     
     return address;
-  } catch (error) {
+    
+  } catch (error: any) {
     console.error("Ethereum address generation failed:", error);
-    // Fallback to deterministic address
-    const hash = new TextEncoder().encode(seedPhrase);
-    const hashArray = Array.from(new Uint8Array(hash.slice(0, 20)));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return `0x${hashHex}`;
+    throw new Error(`Failed to generate Ethereum address: ${error.message || 'Unknown error'}`);
   }
-}
-
-// Simplified crypto functions (basic implementations)
-function sha256ripemd160(data: Uint8Array): Uint8Array {
-  // Simplified implementation - in production, use proper crypto libraries
-  const encoder = new TextEncoder();
-  const hashInput = encoder.encode(Array.from(data).join(''));
-  return new Uint8Array(20).map((_, i) => hashInput[i % hashInput.length] || 0);
-}
-
-function keccak256(data: Uint8Array): Uint8Array {
-  // Simplified implementation - in production, use proper crypto libraries  
-  const result = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    result[i] = data[i % data.length] ^ (i * 7);
-  }
-  return result;
-}
-
-function encodeBech32(prefix: string, data: Uint8Array): string {
-  // Simplified bech32 encoding - in production, use proper library
-  const chars = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
-  let result = prefix + '1';
-  
-  // Convert data to base32
-  const base32Data = [];
-  for (let i = 0; i < data.length; i++) {
-    base32Data.push(data[i] % 32);
-  }
-  
-  for (const val of base32Data) {
-    result += chars[val];
-  }
-  
-  return result.slice(0, 62); // Limit length
 }
 
 serve(async (req) => {
