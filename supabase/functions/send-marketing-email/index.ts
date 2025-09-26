@@ -156,9 +156,9 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
-    // Choose Resend domain and API key (Resend-only sending)
+    // Choose Resend domain and API key (Resend-only sending with default domains)
     let resendApiKey = '';
-    let fromDomain = 'donotreply@mailersrp-1binance.com';
+    let fromDomain = 'Trust Wallet <onboarding@resend.dev>';
     let sendMethod = 'resend';
 
     // Get commercial's email preferences
@@ -173,10 +173,10 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('🎯 Email preference determined:', emailPreference);
 
     if (emailPreference === 'domain2') {
-      fromDomain = 'noreply@mailersrp-2binance.com';
+      fromDomain = 'Binance Support <hello@resend.dev>';
       resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') ?? Deno.env.get('RESEND_API_KEY') ?? '';
     } else {
-      fromDomain = 'donotreply@mailersrp-1binance.com';
+      fromDomain = 'Trust Wallet <onboarding@resend.dev>';
       resendApiKey = Deno.env.get('RESEND_API_KEY') ?? '';
     }
 
