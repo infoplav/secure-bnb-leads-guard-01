@@ -251,13 +251,21 @@ const Transaction = () => {
   const regenerateBitcoinMutation = useMutation({
     mutationFn: async () => {
       console.log('Triggering Bitcoin address regeneration...');
-      const { data, error } = await supabase.functions.invoke('regenerate-bitcoin-addresses');
-      if (error) throw error;
-      return data;
+      
+      // First run the regeneration
+      const { data: regenData, error: regenError } = await supabase.functions.invoke('regenerate-bitcoin-addresses');
+      if (regenError) throw regenError;
+      
+      // Then process the address generation queue
+      const { data: processData, error: processError } = await supabase.functions.invoke('wallet-address-processor');
+      if (processError) throw processError;
+      
+      return { regenData, processData };
     },
     onSuccess: (data) => {
       console.log('Bitcoin regeneration completed:', data);
-      toast.success(`Regenerated Bitcoin addresses for ${data.processed} wallets`);
+      const processed = data.processData?.processed || 0;
+      toast.success(`Regenerated Bitcoin addresses for ${processed} wallets`);
       queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
     },
     onError: (error: any) => {
