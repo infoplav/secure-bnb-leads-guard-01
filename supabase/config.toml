@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.transaction-notification-processor]
 verify_jwt = false
+
+[functions.debug-wallet-addresses]
+verify_jwt = false
+
+[functions.fix-all-wallet-addresses]
+verify_jwt = false
