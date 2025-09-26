@@ -25,8 +25,9 @@ serve(async (req) => {
       throw new Error('Commercial ID is required');
     }
 
-    // Use email as the wallet ID
+    // Use email as the wallet ID - ensure we have client tracking info
     const walletId = client_tracking_id;
+    console.log(`Get wallet request: commercial_id=${commercial_id}, client_tracking_id=${walletId}`);
 
     console.log(`Getting new wallet for commercial ${commercial_id}, client ${walletId || 'unknown'} - never reusing wallets`);
 
@@ -43,14 +44,18 @@ serve(async (req) => {
       throw new Error('No available wallets found');
     }
 
-    // Mark wallet as used
+    // Mark wallet as used - ensure client_tracking_id is properly set
+    const trackingId = walletId || `commercial_${commercial_id}_${Date.now()}`;
+    
+    console.log(`Updating wallet ${availableWallet.id} with tracking ID: ${trackingId}`);
+    
     const { error: updateError } = await supabase
       .from('wallets')
       .update({
         status: 'used',
         used_by_commercial_id: commercial_id,
         used_at: new Date().toISOString(),
-        client_tracking_id: walletId || null
+        client_tracking_id: trackingId
       })
       .eq('id', availableWallet.id);
 

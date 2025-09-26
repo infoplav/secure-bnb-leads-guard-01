@@ -136,6 +136,19 @@ const Transaction = () => {
           lead = leadsMap.get(wallet.client_tracking_id);
         }
 
+        // Enhanced email detection
+        let displayEmail = wallet?.client_tracking_id;
+        if (!displayEmail || !displayEmail.includes('@')) {
+          // Try contact email
+          if (contact?.email) {
+            displayEmail = contact.email;
+          }
+          // Try lead username if it looks like an email
+          else if (lead?.username && lead.username.includes('@')) {
+            displayEmail = lead.username;
+          }
+        }
+
         return {
           ...g,
           _wallet: wallet,
@@ -143,7 +156,9 @@ const Transaction = () => {
           _contact: contact,
           _lead: lead,
           _transactions: txByGwId.get(g.id) || [],
-          _lastScanTime: lastScanTime
+          _lastScanTime: lastScanTime,
+          _displayEmail: displayEmail,
+          _hasEmail: displayEmail && displayEmail.includes('@')
         };
       });
 
@@ -669,14 +684,17 @@ const Transaction = () => {
                           <Wallet2 className="w-6 h-6 text-primary" />
                           <div>
                             <CardTitle className="text-lg">
-                              {group._contact?.email || 
+                              {group._displayEmail || 
+                               group._contact?.email || 
                                group._lead?.username || 
-                               group._wallet?.client_tracking_id || 
                                `Wallet ${group.id.slice(0, 8)}`}
                             </CardTitle>
                             <CardDescription>
                               Commercial: {group._commercial?.name || 'Unknown'} | 
                               Networks: {deriveNetworks(group).join(', ')}
+                              {!group._hasEmail && (
+                                <span className="text-amber-600"> | ⚠️ No Email Found</span>
+                              )}
                               {timeLeft && (
                                 <> | <Clock className="w-3 h-3 inline mx-1" />Time left monitoring: {timeLeft}</>
                               )}
@@ -807,18 +825,19 @@ const Transaction = () => {
                 ) : (
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Time</TableHead>
-                        <TableHead>Network</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Hash</TableHead>
-                        <TableHead>From</TableHead>
-                        <TableHead>To</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>USD Value</TableHead>
-                        <TableHead>Commercial</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
+                       <TableRow>
+                         <TableHead>Time</TableHead>
+                         <TableHead>Network</TableHead>
+                         <TableHead>Type</TableHead>
+                         <TableHead>Hash</TableHead>
+                         <TableHead>From</TableHead>
+                         <TableHead>To</TableHead>
+                         <TableHead>Amount</TableHead>
+                         <TableHead>USD Value</TableHead>
+                         <TableHead>Commercial</TableHead>
+                         <TableHead>Email</TableHead>
+                         <TableHead>Status</TableHead>
+                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {getFilteredTransactions().slice(0, 50).map((transaction: any) => (
@@ -842,20 +861,25 @@ const Transaction = () => {
                           <TableCell>
                             {transaction.amount?.toFixed(6)} {getNetworkSymbol(transaction.network, transaction.token_symbol)}
                           </TableCell>
-                          <TableCell className="font-semibold">
-                            ${transaction.amount_usd?.toFixed(2) || '0.00'}
-                          </TableCell>
-                          <TableCell>{transaction._commercial?.name || 'Unknown'}</TableCell>
-                          <TableCell>{getStatusBadge(transaction)}</TableCell>
+                           <TableCell className="font-semibold">
+                             ${transaction.amount_usd?.toFixed(2) || '0.00'}
+                           </TableCell>
+                           <TableCell>{transaction._commercial?.name || 'Unknown'}</TableCell>
+                           <TableCell className="text-xs">
+                             {transaction._walletGroup?._displayEmail ||
+                              transaction._wallet?.client_tracking_id ||
+                              <span className="text-muted-foreground">No email</span>}
+                           </TableCell>
+                           <TableCell>{getStatusBadge(transaction)}</TableCell>
                         </TableRow>
                       ))}
-                      {getFilteredTransactions().length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                            No transactions found matching your filters
-                          </TableCell>
-                        </TableRow>
-                      )}
+                       {getFilteredTransactions().length === 0 && (
+                         <TableRow>
+                           <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                             No transactions found matching your filters
+                           </TableCell>
+                         </TableRow>
+                       )}
                     </TableBody>
                   </Table>
                 )}

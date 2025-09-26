@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter, Clock } from 'lucide-react';
+import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter, Clock, Settings } from 'lucide-react';
 import { format } from 'date-fns';
+import RepairWalletEmails from './RepairWalletEmails';
 
 const WalletManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,7 +48,7 @@ const WalletManagement = () => {
     return `${hours}h ${minutes}min`;
   };
 
-  // Fetch wallets
+  // Fetch wallets with enhanced data
   const { data: wallets, isLoading } = useQuery({
     queryKey: ['wallets', currentTab],
     queryFn: async () => {
@@ -72,7 +73,39 @@ const WalletManagement = () => {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data || [];
+      
+      // Enhance wallets with additional email information
+      const enhancedWallets = await Promise.all((data || []).map(async (wallet: any) => {
+        let displayEmail = wallet.client_tracking_id;
+        
+        // If no client_tracking_id, try to find email from related data
+        if (!displayEmail && wallet.used_by_commercial_id) {
+          try {
+            // Try to find marketing contact
+            const { data: contact } = await supabase
+              .from('marketing_contacts')
+              .select('email, name')
+              .eq('commercial_id', wallet.used_by_commercial_id)
+              .order('updated_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (contact?.email) {
+              displayEmail = contact.email;
+            }
+          } catch (err) {
+            console.warn('Error fetching contact for wallet:', wallet.id, err);
+          }
+        }
+        
+        return {
+          ...wallet,
+          _displayEmail: displayEmail,
+          _hasEmail: !!displayEmail && displayEmail.includes('@')
+        };
+      }));
+      
+      return enhancedWallets;
     }
   });
 
@@ -298,6 +331,9 @@ const WalletManagement = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Wallet Management</h2>
+        <div className="flex items-center gap-2">
+          <RepairWalletEmails />
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -481,9 +517,14 @@ const WalletManagement = () => {
                        wallet.status === 'used' ? "Used" : 
                        "Transfer"}
                     </Badge>
-                    {wallet.client_tracking_id && (
-                      <Badge variant="outline">
-                        Email: {wallet.client_tracking_id}
+                    {wallet._displayEmail && (
+                      <Badge variant={wallet._hasEmail ? "default" : "outline"}>
+                        {wallet._hasEmail ? "📧" : "ID"}: {wallet._displayEmail}
+                      </Badge>
+                    )}
+                    {!wallet._displayEmail && wallet.used_by_commercial_id && (
+                      <Badge variant="secondary">
+                        No Email Found
                       </Badge>
                     )}
                   </div>
