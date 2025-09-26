@@ -173,7 +173,8 @@ class WebRTCSipGateway {
         const data = encoder.encode(registerMessage);
         await this.sipSocket.send(data, { 
           hostname: '195.154.179.234', 
-          port: 5744 
+          port: 5744,
+          transport: 'udp'
         });
 
         // Simulate successful registration for now
@@ -221,7 +222,8 @@ class WebRTCSipGateway {
         const data = encoder.encode(inviteMessage);
         await this.sipSocket.send(data, { 
           hostname: '195.154.179.234', 
-          port: 5744 
+          port: 5744,
+          transport: 'udp'
         });
 
         // Simulate call progression
@@ -278,7 +280,8 @@ class WebRTCSipGateway {
         const data = encoder.encode(byeMessage);
         await this.sipSocket.send(data, { 
           hostname: '195.154.179.234', 
-          port: 5744 
+          port: 5744,
+          transport: 'udp'
         });
       }
 

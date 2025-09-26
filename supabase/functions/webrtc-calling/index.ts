@@ -220,11 +220,11 @@ async function establishSipConnection(sipCredentials: any, phoneNumber: string, 
       note: 'WebRTC demo mode - no actual SIP call made'
     };
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('SIP connection error:', error);
     return {
       success: false,
-      error: error.message
+      error: (error?.message) || 'Unknown error'
     };
   }
 }

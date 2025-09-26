@@ -530,8 +530,19 @@ const handler = async (req: Request): Promise<Response> => {
           data: { success: true, method: 'php', result: phpResult }
         };
       } catch (phpError) {
-        console.error('❌ PHP sending failed, NO FALLBACK for alias mode:', phpError);
-        throw new Error(`Alias email sending failed: ${(phpError as any)?.message}`);
+        console.error('❌ PHP sending failed, attempting Resend fallback:', phpError);
+        // Fallback to Resend if PHP alias sending fails
+        const resendClient = await getResend();
+        if (!resendClient) {
+          throw new Error(`Alias email sending failed and Resend init failed: ${(phpError as any)?.message}`);
+        }
+        emailResponse = await resendClient.emails.send({
+          from: `${senderName} <${fromDomain}>`,
+          to: [to],
+          subject: emailSubject,
+          html: emailContent,
+        });
+        console.log('✅ Resend fallback succeeded:', emailResponse);
       }
     } else {
       console.log('📨 USING RESEND METHOD...');
