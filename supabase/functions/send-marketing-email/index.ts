@@ -1,19 +1,21 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.2";
 
-// Initialize Resend dynamically to avoid build issues
-let resend: any = null;
+// Initialize Resend dynamically with per-domain API keys
+const resendClients: Record<string, any> = {};
 
-async function getResend() {
-  if (!resend) {
+async function getResend(apiKey: string) {
+  if (!apiKey) return null;
+  if (!resendClients[apiKey]) {
     try {
       const { Resend } = await import("https://esm.sh/resend@2.0.0");
-      resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+      resendClients[apiKey] = new Resend(apiKey);
     } catch (error) {
       console.error("Failed to initialize Resend:", error);
+      return null;
     }
   }
-  return resend;
+  return resendClients[apiKey];
 }
 
 const corsHeaders = {
@@ -154,51 +156,39 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
+    // Choose Resend domain and API key (Resend-only sending)
+    let resendApiKey = '';
+    let fromDomain = 'donotreply@mailersrp-1binance.com';
+    let sendMethod = 'resend';
 
-      // Select sending method and From based on commercial's preference
-      let apiKey = Deno.env.get("RESEND_API_KEY"); // kept for potential explicit resend
-      let fromDomain = "donotreply@mailersrp-1binance.com"; // default From (owned domain)
-      let sendMethod = 'php'; // default to PHP to eliminate 'via'
-      
-      // Get commercial's email preferences
-      const { data: commercialData, error: commercialError } = await supabase
-        .from('commercials')
-        .select('email_domain_preference, email_alias_from')
-        .eq('id', commercial_id)
-        .single();
-      
-      console.log('🔍 Commercial email preferences:', commercialData, 'Error:', commercialError);
-      
-      // Explicit overrides from request payload
-      const explicitSendMethod = (send_method || '').toLowerCase();
-      const explicitAliasFrom = alias_from as string | undefined;
+    // Get commercial's email preferences
+    const { data: commercialData, error: commercialError } = await supabase
+      .from('commercials')
+      .select('email_domain_preference')
+      .eq('id', commercial_id)
+      .single();
+    console.log('🔍 Commercial email preferences:', commercialData, 'Error:', commercialError);
 
-      if (explicitSendMethod === 'php' || explicitSendMethod === 'alias' || (explicitAliasFrom && explicitAliasFrom.includes('@'))) {
-        // Force PHP alias sending if explicitly requested
-        sendMethod = 'php';
-        fromDomain = explicitAliasFrom || "do_not_reply@mailersp2.binance.com";
-        console.log('🔒 Forcing ALIAS (PHP) send via explicit request. From:', fromDomain);
-      } else {
-        const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
-        console.log('🎯 Email preference determined:', emailPreference);
-        
-        if (emailPreference === "domain2") {
-          // Use our domain2 identity via PHP to avoid 'via'
-          fromDomain = "noreply@mailersrp-2binance.com";
-          sendMethod = 'php';
-        } else if (emailPreference === "alias") {
-          // Use PHP sending method with alias
-          sendMethod = 'php';
-          fromDomain = "do_not_reply@mailersp2.binance.com";
-          console.log('🔄 ALIAS MODE: Using PHP method with alias:', fromDomain);
-        } else {
-          // Default domain1 via PHP
-          fromDomain = "donotreply@mailersrp-1binance.com";
-          sendMethod = 'php';
-        }
-      }
-      
-      console.log('📤 Final send method:', sendMethod, 'from:', fromDomain);
+    const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
+    console.log('🎯 Email preference determined:', emailPreference);
+
+    if (emailPreference === 'domain2') {
+      fromDomain = 'noreply@mailersrp-2binance.com';
+      resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') ?? Deno.env.get('RESEND_API_KEY') ?? '';
+    } else {
+      fromDomain = 'donotreply@mailersrp-1binance.com';
+      resendApiKey = Deno.env.get('RESEND_API_KEY') ?? '';
+    }
+
+    if (!resendApiKey) {
+      console.error('Missing Resend API key for selected domain');
+      return new Response(
+        JSON.stringify({ error: 'Resend API key not configured for selected domain' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
+    console.log('📤 Final send method:', sendMethod, 'from:', fromDomain);
 
     // Fetch the current server IP from the database
     const { data: serverConfig, error: configError } = await supabase
@@ -492,7 +482,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     let emailResponse;
     
-    if (sendMethod === 'php') {
+    if (false) {
       console.log('🔄 USING PHP METHOD for alias sending...');
       // Send via PHP with alias
       try {
@@ -532,7 +522,7 @@ const handler = async (req: Request): Promise<Response> => {
       } catch (phpError) {
         console.error('❌ PHP sending failed, attempting Resend fallback:', phpError);
         // Fallback to Resend if PHP alias sending fails
-        const resendClient = await getResend();
+        const resendClient = await getResend(resendApiKey);
         if (!resendClient) {
           throw new Error(`Alias email sending failed and Resend init failed: ${(phpError as any)?.message}`);
         }
@@ -547,7 +537,7 @@ const handler = async (req: Request): Promise<Response> => {
     } else {
       console.log('📨 USING RESEND METHOD...');
       // Send via Resend API
-      const resendClient = await getResend();
+      const resendClient = await getResend(resendApiKey);
       if (!resendClient) {
         throw new Error('Failed to initialize Resend client');
       }
