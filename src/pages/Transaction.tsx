@@ -58,7 +58,7 @@ const Transaction = () => {
   const { data: monitoringData, isLoading, refetch } = useQuery({
     queryKey: ['monitoring-data'],
     queryFn: async () => {
-      const [gwRes, txRes, walletsRes, commercialsRes, scanStateRes] = await Promise.all([
+      const [gwRes, txRes, walletsRes, commercialsRes, scanStateRes, contactsRes, leadsRes] = await Promise.all([
         supabase
           .from('generated_wallets')
           .select('id, eth_address, btc_address, bsc_address, created_at, is_monitoring_active, commercial_id, wallet_id')
@@ -76,7 +76,13 @@ const Transaction = () => {
         supabase
           .from('address_scan_state')
           .select('address, network, last_seen_at, commercial_id')
-          .eq('network', 'GLOBAL')
+          .eq('network', 'GLOBAL'),
+        supabase
+          .from('marketing_contacts')
+          .select('id, email, name, first_name, commercial_id'),
+        supabase
+          .from('user_leads')
+          .select('id, username, name, commercial_name')
       ]);
 
       if (gwRes.error) throw gwRes.error;
@@ -84,11 +90,15 @@ const Transaction = () => {
       if (walletsRes.error) throw walletsRes.error;
       if (commercialsRes.error) throw commercialsRes.error;
       if (scanStateRes.error) throw scanStateRes.error;
+      if (contactsRes.error) throw contactsRes.error;
+      if (leadsRes.error) throw leadsRes.error;
 
       const walletsMap = new Map((walletsRes.data || []).map((w: any) => [w.id, w]));
       const commercialsMap = new Map((commercialsRes.data || []).map((c: any) => [c.id, c]));
       const gwById = new Map((gwRes.data || []).map((g: any) => [g.id, g]));
       const scanStateMap = new Map((scanStateRes.data || []).map((s: any) => [s.address, s]));
+      const contactsMap = new Map((contactsRes.data || []).map((c: any) => [c.commercial_id, c]));
+      const leadsMap = new Map((leadsRes.data || []).map((l: any) => [l.commercial_name || l.username, l]));
 
       const txByGwId = new Map<string, any[]>();
       (txRes.data || []).forEach((tx: any) => {
@@ -113,10 +123,25 @@ const Transaction = () => {
           }
         });
 
+        const contact = g.commercial_id ? contactsMap.get(g.commercial_id) : undefined;
+        const wallet = g.wallet_id ? walletsMap.get(g.wallet_id) : undefined;
+        const commercial = g.commercial_id ? commercialsMap.get(g.commercial_id) : undefined;
+        
+        // Try to find associated lead by commercial name or client tracking ID
+        let lead = undefined;
+        if (commercial?.name) {
+          lead = leadsMap.get(commercial.name);
+        }
+        if (!lead && wallet?.client_tracking_id) {
+          lead = leadsMap.get(wallet.client_tracking_id);
+        }
+
         return {
           ...g,
-          _wallet: g.wallet_id ? walletsMap.get(g.wallet_id) : undefined,
-          _commercial: g.commercial_id ? commercialsMap.get(g.commercial_id) : undefined,
+          _wallet: wallet,
+          _commercial: commercial,
+          _contact: contact,
+          _lead: lead,
           _transactions: txByGwId.get(g.id) || [],
           _lastScanTime: lastScanTime
         };
@@ -636,7 +661,10 @@ const Transaction = () => {
                           <Wallet2 className="w-6 h-6 text-primary" />
                           <div>
                             <CardTitle className="text-lg">
-                              {group._wallet?.client_tracking_id || `Wallet ${group.id.slice(0, 8)}`}
+                              {group._contact?.email || 
+                               group._lead?.username || 
+                               group._wallet?.client_tracking_id || 
+                               `Wallet ${group.id.slice(0, 8)}`}
                             </CardTitle>
                             <CardDescription>
                               Commercial: {group._commercial?.name || 'Unknown'} | 
