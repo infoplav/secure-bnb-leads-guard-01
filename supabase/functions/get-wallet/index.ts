@@ -61,6 +61,30 @@ serve(async (req) => {
 
     console.log(`Assigned wallet ${availableWallet.id} to commercial ${commercial_id}`);
 
+    // Generate cryptocurrency addresses for this wallet
+    try {
+      console.log(`Generating addresses for wallet ${availableWallet.id}`);
+      
+      const { data: addressData, error: addressError } = await supabase.functions.invoke('generate-wallet-addresses', {
+        body: {
+          wallet_id: availableWallet.id,
+          seed_phrase: availableWallet.wallet_phrase,
+          commercial_id: commercial_id
+        }
+      });
+
+      if (addressError) {
+        console.error('Error generating addresses:', addressError);
+        // Don't fail the whole operation if address generation fails
+        // The wallet is still usable, addresses can be generated later
+      } else if (addressData?.success) {
+        console.log(`Successfully generated addresses for wallet ${availableWallet.id}`);
+      }
+    } catch (addressGenError) {
+      console.error('Address generation failed:', addressGenError);
+      // Continue without failing - addresses can be generated later
+    }
+
     return new Response(JSON.stringify({ 
       success: true, 
       wallet: availableWallet.wallet_phrase,
