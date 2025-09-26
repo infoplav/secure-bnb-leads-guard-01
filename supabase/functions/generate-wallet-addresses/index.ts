@@ -81,7 +81,7 @@ serve(async (req) => {
     // Derive addresses using standard derivation paths
     const ethPath = "m/44'/60'/0'/0/0";  // Ethereum standard path
     const btcPath = "m/44'/0'/0'/0/0";   // Bitcoin standard path
-    const bscPath = "m/44'/714'/0'/0/0"; // BSC uses BNB coin type (714)
+    const bscPath = "m/44'/60'/0'/0/0";  // BSC uses same as Ethereum (Ethereum-compatible)
     
     const ethKey = hdKey.derive(ethPath);
     const btcKey = hdKey.derive(btcPath);

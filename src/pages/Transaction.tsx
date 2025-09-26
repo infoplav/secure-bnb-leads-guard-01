@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AddressFixTool } from "@/components/CRM/AddressFixTool";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -609,9 +610,10 @@ const Transaction = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="monitoring" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="monitoring">Used Wallet Monitoring</TabsTrigger>
             <TabsTrigger value="transactions">All Transactions</TabsTrigger>
+            <TabsTrigger value="fix-addresses">Fix Addresses</TabsTrigger>
           </TabsList>
           
           <TabsContent value="monitoring" className="space-y-4">
@@ -822,6 +824,10 @@ const Transaction = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+          
+          <TabsContent value="fix-addresses" className="space-y-4">
+            <AddressFixTool />
           </TabsContent>
         </Tabs>
       </div>
