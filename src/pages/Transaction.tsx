@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { AddressFixTool } from "@/components/CRM/AddressFixTool";
+import { TriggerWalletScan } from "@/components/CRM/TriggerWalletScan";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -828,6 +829,7 @@ const Transaction = () => {
           
           <TabsContent value="fix-addresses" className="space-y-4">
             <AddressFixTool />
+            <TriggerWalletScan />
           </TabsContent>
         </Tabs>
       </div>
