@@ -395,7 +395,10 @@ const handler = async (req: Request): Promise<Response> => {
     }
     
     // Check if wallet placeholders exist in email content or subject
-    const walletPlaceholdersDetected = hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject);
+    const walletPlaceholdersDetected = hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject) || hasWalletPlaceholder(content || '') || hasWalletPlaceholder(subject || '');
+    console.log('Wallet detection - emailContent length:', emailContent.length);
+    console.log('Wallet detection - content preview:', emailContent.substring(0, 200) + '...');
+    console.log('Wallet detection result:', walletPlaceholdersDetected);
     let walletWasUsed = false;
     let uniqueWallet = ''; // Store the wallet for Telegram notification
     
