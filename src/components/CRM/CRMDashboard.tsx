@@ -16,6 +16,7 @@ import EmailLogsViewer from './EmailLogsViewer';
 import WalletManagement from './WalletManagement';
 import WalletEntry from './WalletEntry';
 import SeedPhraseManagement from './SeedPhraseManagement';
+import { TestTelegramNotification } from './TestTelegramNotification';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Lead {
@@ -853,7 +854,10 @@ const CRMDashboard = () => {
           </TabsContent>
           
           <TabsContent value="seeds">
-            <SeedPhraseManagement />
+            <div className="space-y-6">
+              <SeedPhraseManagement />
+              <TestTelegramNotification />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
