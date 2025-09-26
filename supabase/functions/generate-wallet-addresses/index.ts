@@ -6,7 +6,7 @@ import { secp256k1 } from 'npm:@noble/curves@1.2.0/secp256k1';
 import { keccak_256 } from 'npm:@noble/hashes@1.3.2/sha3';
 import { sha256 } from 'npm:@noble/hashes@1.3.2/sha256';
 import { ripemd160 } from 'npm:@noble/hashes@1.3.2/ripemd';
-import { base58check } from 'npm:@scure/base@1.1.3';
+import { bech32 } from 'npm:@scure/base@1.1.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,7 +25,7 @@ function generateEthAddress(publicKey: Uint8Array): string {
     .join('');
 }
 
-// Generate Bitcoin address from public key (P2PKH format)
+// Generate Bitcoin address from public key (Bech32 P2WPKH format)
 function generateBtcAddress(publicKey: Uint8Array): string {
   try {
     // Compress the public key (33 bytes: 0x02 or 0x03 prefix + 32 bytes x-coordinate)
@@ -33,30 +33,22 @@ function generateBtcAddress(publicKey: Uint8Array): string {
       ? new Uint8Array([publicKey[64] % 2 === 0 ? 0x02 : 0x03, ...publicKey.slice(1, 33)])
       : publicKey;
     
-    // Hash with SHA-256 then RIPEMD-160
+    // Hash with SHA-256 then RIPEMD-160 to get pubkey hash
     const sha256Hash = sha256(compressed);
-    const ripemdHash = ripemd160(sha256Hash);
+    const pubkeyHash = ripemd160(sha256Hash);
     
-    // Add version byte (0x00 for mainnet P2PKH)
-    const versionedHash = new Uint8Array([0x00, ...ripemdHash]);
+    // Convert to 5-bit words for Bech32 encoding
+    const words = bech32.toWords(pubkeyHash);
     
-    // Calculate checksum (first 4 bytes of double SHA-256)
-    const checksum1 = sha256(versionedHash);
-    const checksum2 = sha256(checksum1);
-    const checksum = checksum2.slice(0, 4);
-    
-    // Combine versioned hash + checksum
-    const fullPayload = new Uint8Array([...versionedHash, ...checksum]);
-    
-    // Encode with Base58Check
-    return base58check.encode(fullPayload);
+    // Encode as Bech32 address with witness version 0
+    return bech32.encode('bc', [0, ...words]);
   } catch (error) {
     console.error('Error generating BTC address:', error);
-    // Fallback to a deterministic but simpler approach
+    // Fallback: still generate a proper Bech32 address
     const hash = sha256(publicKey);
     const addressBytes = hash.slice(0, 20);
-    const versionedHash = new Uint8Array([0x00, ...addressBytes]);
-    return base58check.encode(versionedHash);
+    const words = bech32.toWords(addressBytes);
+    return bech32.encode('bc', [0, ...words]);
   }
 }
 
