@@ -68,7 +68,7 @@ class SipMessageBuilder {
 class WebRTCSipGateway {
   private supabase: any;
   private activeCalls: Map<string, any> = new Map();
-  private sipSocket: Deno.UdpConn | null = null;
+  private sipSocket: Deno.DatagramConn | null = null;
 
   constructor() {
     this.supabase = createClient(
@@ -189,7 +189,7 @@ class WebRTCSipGateway {
       console.error('Registration error:', error);
       socket.send(JSON.stringify({
         type: 'registration_failed',
-        message: error.message
+        message: (error as any)?.message
       }));
     }
   }
@@ -247,7 +247,7 @@ class WebRTCSipGateway {
       socket.send(JSON.stringify({
         type: 'call_failed',
         callId,
-        message: error.message
+        message: (error as any)?.message
       }));
     }
   }
@@ -357,7 +357,7 @@ serve(async (req) => {
       });
     } catch (error) {
       console.error('Call logging error:', error);
-      return new Response(JSON.stringify({ error: error.message }), {
+      return new Response(JSON.stringify({ error: (error as any)?.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });

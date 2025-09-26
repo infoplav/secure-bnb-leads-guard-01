@@ -57,13 +57,13 @@ serve(async (req) => {
       }
     )
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in auto-balance-trigger:', error)
     
     return new Response(
       JSON.stringify({ 
         error: 'Trigger execution failed',
-        details: error.message 
+        details: error?.message 
       }),
       { 
         status: 500, 

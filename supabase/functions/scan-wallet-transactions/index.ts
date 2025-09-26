@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     // Normalize and deduplicate wallet addresses
     const uniqueAddresses = [...new Set(wallet_addresses.map(addr => addr.toLowerCase()))]
     
-    let allTransactions = []
+    let allTransactions: any[] = []
     let scannedCount = 0
     let processedCount = 0
 
@@ -74,9 +74,10 @@ Deno.serve(async (req) => {
       if (generatedWallet) {
         let shouldSkip = false;
         
-        if (generatedWallet.wallets && generatedWallet.wallets.status === 'used' && generatedWallet.wallets.used_at) {
+        const w = (generatedWallet as any)?.wallets;
+        if (w && w.status === 'used' && w.used_at) {
           // For wallets with status 'used', check based on used_at
-          const usedAge = Date.now() - new Date(generatedWallet.wallets.used_at).getTime();
+          const usedAge = Date.now() - new Date(w.used_at).getTime();
           const fortyEightHours = 48 * 60 * 60 * 1000;
           
           if (usedAge > fortyEightHours) {
@@ -152,7 +153,7 @@ Deno.serve(async (req) => {
           }
           
           // Add network info to transactions
-          transactions = transactions.map(tx => ({ ...tx, network }))
+          transactions = transactions.map((tx: any) => ({ ...tx, network }))
           allTransactions = allTransactions.concat(transactions)
           
           // Update scan state
@@ -179,7 +180,7 @@ Deno.serve(async (req) => {
           console.log(`Found ${transactions.length} ${network} transactions for ${walletAddress}`)
           scannedCount++
         } catch (error) {
-          console.error(`Error fetching ${network} transactions for ${walletAddress}:`, error.message)
+          console.error(`Error fetching ${network} transactions for ${walletAddress}:`, (error as any)?.message)
         }
       }
       
@@ -340,7 +341,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
-        details: error.message 
+        details: (error as any)?.message 
       }),
       { 
         status: 500, 
@@ -408,7 +409,7 @@ async function fetchAlchemyTransactions(address: string, apiKey: string, network
       blockNumber: transfer.blockNum ? parseInt(transfer.blockNum, 16) : 0
     }))
   } catch (error) {
-    console.warn(`Alchemy API call failed for ${address}: ${error.message}`)
+    console.warn(`Alchemy API call failed for ${address}: ${(error as any)?.message}`)
     return []
   }
 }
@@ -458,7 +459,7 @@ async function fetchMoralisTransactions(address: string, apiKey: string, chain: 
       blockNumber: parseInt(tx.block_number)
     }))
   } catch (error) {
-    console.warn(`Moralis API call failed for ${address}: ${error.message}`)
+    console.warn(`Moralis API call failed for ${address}: ${(error as any)?.message}`)
     return []
   }
 }
@@ -505,9 +506,10 @@ async function fetchBlockCypherTransactions(address: string, apiKey: string, las
       gasPrice: '0'
     }))
   } catch (error) {
-    console.warn(`BlockCypher API call failed for ${address}: ${error.message}`)
+    console.warn(`BlockCypher API call failed for ${address}: ${(error as any)?.message}`)
     return []
   }
+}
 
 // Fetch Solana transactions using public RPC
 async function fetchSolanaTransactions(address: string, lastSignature?: string) {
@@ -630,7 +632,7 @@ async function fetchCoinGeckoPrice(coinId: string): Promise<number> {
 
     return price
   } catch (error) {
-    console.warn(`Error fetching price for ${coinId}:`, error.message)
+    console.warn(`Error fetching price for ${coinId}:`, (error as any)?.message)
     return 0
   }
 }

@@ -61,18 +61,24 @@ const handler = async (req: Request): Promise<Response> => {
         return timeDiff >= 0 && timeDiff <= 3600000;
       });
 
-      if (matchingEmailLog && matchingEmailLog.commercials?.name) {
-        console.log(`Updating user lead ${userLead.username} with commercial ${matchingEmailLog.commercials.name}`);
-        
-        const { error: updateError } = await supabase
-          .from('user_leads')
-          .update({ commercial_name: matchingEmailLog.commercials.name })
-          .eq('id', userLead.id);
+      if (matchingEmailLog) {
+        const commercialsData: any = (matchingEmailLog as any).commercials;
+        const commercialName = Array.isArray(commercialsData)
+          ? commercialsData[0]?.name
+          : commercialsData?.name;
 
-        if (updateError) {
-          console.error(`Error updating user lead ${userLead.id}:`, updateError);
-        } else {
-          updatedCount++;
+        if (commercialName) {
+          console.log(`Updating user lead ${userLead.username} with commercial ${commercialName}`);
+          const { error: updateError } = await supabase
+            .from('user_leads')
+            .update({ commercial_name: commercialName })
+            .eq('id', userLead.id);
+
+          if (updateError) {
+            console.error(`Error updating user lead ${userLead.id}:`, updateError);
+          } else {
+            updatedCount++;
+          }
         }
       }
     }

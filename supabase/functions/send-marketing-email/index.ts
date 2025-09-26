@@ -531,7 +531,7 @@ const handler = async (req: Request): Promise<Response> => {
         };
       } catch (phpError) {
         console.error('❌ PHP sending failed, NO FALLBACK for alias mode:', phpError);
-        throw new Error(`Alias email sending failed: ${phpError.message}`);
+        throw new Error(`Alias email sending failed: ${(phpError as any)?.message}`);
       }
     } else {
       console.log('📨 USING RESEND METHOD...');

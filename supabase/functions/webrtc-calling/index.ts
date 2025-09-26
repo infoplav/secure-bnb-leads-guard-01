@@ -95,10 +95,10 @@ serve(async (req) => {
       }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing request:', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ error: (error?.message) || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -172,10 +172,10 @@ async function handleSipCall(phoneNumber: string, offer: any, userId: string, ca
     // Clean up
     activeCalls.delete(callId);
     
-    return {
-      success: false,
-      error: `Call failed: ${error.message}`
-    };
+      return {
+        success: false,
+        error: `Call failed: ${(error as any)?.message}`
+      };
   }
 }
 

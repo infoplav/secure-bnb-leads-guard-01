@@ -197,7 +197,7 @@ const handler = async (req: Request): Promise<Response> => {
           const errorCode = responseText.trim();
           console.log("SMS API returned error code:", errorCode);
           
-          const errorMap = {
+          const errorMap: Record<string, string> = {
             'ERR_PARAMETER': 'Missing parameter or malformed URL',
             'ERR_MOBILE': 'Invalid mobile number format',
             'ERR_SENDER': 'Invalid sender ID',

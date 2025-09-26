@@ -58,13 +58,13 @@ serve(async (req) => {
       }
     );
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in set-commercial-offline function:', error);
     
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
-        details: error.message 
+        details: error?.message 
       }),
       { 
         status: 500,

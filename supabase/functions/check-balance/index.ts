@@ -42,11 +42,11 @@ serve(async (req) => {
       server_ip: currentServerIp
     }
 
-    let balanceResult = {
+    let balanceResult: { success: boolean; balance_usd: number; message: string; error: any } = {
       success: false,
       balance_usd: 0,
       message: '',
-      error: null
+      error: null as any
     }
 
     try {
@@ -90,12 +90,12 @@ serve(async (req) => {
         success: false,
         balance_usd: 0,
         message: 'Network Error',
-        error: `Connection failed: ${error.message}`
+        error: `Connection failed: ${(error as any)?.message || String(error)}`
       }
     }
 
     // Update the lead's balance in the database
-    const updateData = {
+    const updateData: any = {
       updated_at: new Date().toISOString()
     }
 
@@ -130,13 +130,13 @@ serve(async (req) => {
       }
     )
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in check-balance function:', error)
     
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
-        details: error.message 
+        details: error?.message 
       }),
       { 
         status: 500, 

@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
           commercial_id: commercialId,
           addresses_count: addresses.length,
           success: false,
-          error: error.message
+          error: (error as any)?.message
         })
       }
     }
@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
-        details: error.message 
+        details: (error as any)?.message 
       }),
       { 
         status: 500, 
