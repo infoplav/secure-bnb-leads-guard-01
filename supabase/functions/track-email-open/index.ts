@@ -40,11 +40,11 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Log the email open event and increment counter
+    // Log the email open event and increment counter - support both tracking formats
     const { data: existing, error: selectError } = await supabase
       .from('email_logs')
       .select('open_count, opened_at')
-      .eq('tracking_code', trackingId)
+      .or(`tracking_id.eq.${trackingId},tracking_code.eq.${trackingId}`)
       .maybeSingle();
 
     if (selectError) {
@@ -60,7 +60,7 @@ const handler = async (req: Request): Promise<Response> => {
         opened_at: openedAt,
         open_count: newCount
       })
-      .eq('tracking_code', trackingId);
+      .or(`tracking_id.eq.${trackingId},tracking_code.eq.${trackingId}`);
 
     if (updateError) {
       console.error('Error logging email open:', updateError);

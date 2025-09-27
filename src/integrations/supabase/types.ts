@@ -234,6 +234,7 @@ export type Database = {
           bounce_reason: string | null
           commercial_id: string | null
           contact_id: string | null
+          content: string | null
           created_at: string | null
           id: string
           open_count: number | null
@@ -246,6 +247,7 @@ export type Database = {
           subject: string | null
           template_id: string | null
           tracking_code: string
+          tracking_id: string | null
           user_id: string | null
         }
         Insert: {
@@ -254,6 +256,7 @@ export type Database = {
           bounce_reason?: string | null
           commercial_id?: string | null
           contact_id?: string | null
+          content?: string | null
           created_at?: string | null
           id?: string
           open_count?: number | null
@@ -266,6 +269,7 @@ export type Database = {
           subject?: string | null
           template_id?: string | null
           tracking_code: string
+          tracking_id?: string | null
           user_id?: string | null
         }
         Update: {
@@ -274,6 +278,7 @@ export type Database = {
           bounce_reason?: string | null
           commercial_id?: string | null
           contact_id?: string | null
+          content?: string | null
           created_at?: string | null
           id?: string
           open_count?: number | null
@@ -286,6 +291,7 @@ export type Database = {
           subject?: string | null
           template_id?: string | null
           tracking_code?: string
+          tracking_id?: string | null
           user_id?: string | null
         }
         Relationships: [
