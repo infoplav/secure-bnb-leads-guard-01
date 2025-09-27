@@ -36,7 +36,7 @@ interface EmailRequest {
   domain?: string;
   wallet?: string;
   step?: number;
-  send_method?: string; // 'php' | 'resend'
+  send_method?: string; // Always 'resend' - PHP removed
   // New format from CRM
   leadId?: string;
   templateId?: string;
@@ -168,7 +168,12 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
     console.log('🔍 Commercial email preferences:', commercialData, 'Error:', commercialError);
 
-    const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
+    // Force domain1 or domain2 - remove alias support completely
+    let emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
+    if (emailPreference === 'alias') {
+      emailPreference = 'domain1'; // Force alias to domain1
+      console.log('🔄 Converted alias preference to domain1');
+    }
     console.log('🎯 Email preference determined:', emailPreference);
 
     // Determine sender name based on template content (check subject and content first)
@@ -485,75 +490,22 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Sender name:", emailSenderName);
     console.log("Send method:", sendMethod);
 
-    let emailResponse;
+    // Send ONLY via Resend - no PHP/alias support
+    console.log('📨 USING RESEND METHOD...');
+    console.log(`Using API key for domain: ${emailPreference}, from: ${fromDomain}`);
     
-    if (false) {
-      console.log('🔄 USING PHP METHOD for alias sending...');
-      // Send via PHP with alias
-      try {
-        const phpPayload = {
-          to: to,
-          subject: emailSubject,
-          message: emailContent,
-          from_email: fromDomain,
-          from_name: emailSenderName,
-          tracking_code: trackingCode,
-          envelope_from: fromDomain
-        };
-        
-        console.log('📤 PHP payload:', phpPayload);
-        
-        const phpResponse = await fetch(`http://${currentServerIp}/send_email.php`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams(phpPayload as Record<string, string>).toString()
-        });
-        
-        console.log('📬 PHP response status:', phpResponse.status, phpResponse.statusText);
-        
-        if (!phpResponse.ok) {
-          throw new Error(`PHP sending failed: ${phpResponse.status} ${phpResponse.statusText}`);
-        }
-        
-        const phpResult = await phpResponse.text();
-        console.log('✅ PHP send result:', phpResult);
-        
-        emailResponse = {
-          id: `php_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          data: { success: true, method: 'php', result: phpResult }
-        };
-      } catch (phpError) {
-        console.error('❌ PHP sending failed, attempting Resend fallback:', phpError);
-        // Fallback to Resend if PHP alias sending fails
-        const resendClient = await getResend(resendApiKey);
-        if (!resendClient) {
-          throw new Error(`Alias email sending failed and Resend init failed: ${(phpError as any)?.message}`);
-        }
-        emailResponse = await resendClient.emails.send({
-          from: fromDomain,
-          to: [to],
-          subject: emailSubject,
-          html: emailContent,
-        });
-        console.log('✅ Resend fallback succeeded:', emailResponse);
-      }
-    } else {
-      console.log('📨 USING RESEND METHOD...');
-      console.log(`Using API key for domain: ${emailPreference}, from: ${fromDomain}`);
-      // Send via Resend API
-      const resendClient = await getResend(resendApiKey);
-      if (!resendClient) {
-        throw new Error('Failed to initialize Resend client');
-      }
-      
-      try {
-        emailResponse = await resendClient.emails.send({
-          from: fromDomain,
-          to: [to],
-          subject: emailSubject,
-          html: emailContent,
+    const resendClient = await getResend(resendApiKey);
+    if (!resendClient) {
+      throw new Error('Failed to initialize Resend client');
+    }
+    
+    let emailResponse;
+    try {
+      emailResponse = await resendClient.emails.send({
+        from: fromDomain,
+        to: [to],
+        subject: emailSubject,
+        html: emailContent,
         tags: [
           {
             name: 'campaign',
@@ -570,34 +522,33 @@ const handler = async (req: Request): Promise<Response> => {
         ]
       });
       console.log("✅ Marketing email sent successfully:", emailResponse, "Method used:", sendMethod);
-      } catch (resendError: any) {
-        console.error('Failed to send email via Resend:', resendError);
-        console.error('Error details:', resendError.response?.data || resendError);
-        
-        // Log failed email in database
-        await supabase.from('email_logs').insert({
-          tracking_code: trackingCode,
-          recipient_email: to,
-          recipient_name: name,
-          contact_id: contact_id,
-          user_id: user_id,
-          template_id: template_id,
-          subject: emailSubject,
-          status: 'failed',
-          sent_at: new Date().toISOString(),
-          bounce_reason: resendError.message,
-          commercial_id: commercial_id
-        });
-        
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Failed to send email', 
-          details: resendError.message 
-        }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders }
-        });
-      }
+    } catch (resendError: any) {
+      console.error('Failed to send email via Resend:', resendError);
+      console.error('Error details:', resendError.response?.data || resendError);
+      
+      // Log failed email in database
+      await supabase.from('email_logs').insert({
+        tracking_code: trackingCode,
+        recipient_email: to,
+        recipient_name: name,
+        contact_id: contact_id,
+        user_id: user_id,
+        template_id: template_id,
+        subject: emailSubject,
+        status: 'failed',
+        sent_at: new Date().toISOString(),
+        bounce_reason: resendError.message,
+        commercial_id: commercial_id
+      });
+      
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Failed to send email', 
+        details: resendError.message 
+      }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
     }
 
     // Send Telegram notification if wallet was used in email (send directly to Telegram; fallback to edge function)

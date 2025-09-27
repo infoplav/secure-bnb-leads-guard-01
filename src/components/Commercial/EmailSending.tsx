@@ -122,12 +122,7 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         subject: tpl.subject,
         content: tpl.content,
         ...(wallet ? { wallet } : {}),
-        step: step,
-        // Hard override to ensure the function uses the correct path
-        send_method: commercial.email_domain_preference === 'alias' ? 'php' : 'resend',
-        ...(commercial.email_domain_preference === 'alias' && commercial.email_alias_from
-          ? { alias_from: commercial.email_alias_from }
-          : {}),
+        step: step
       };
 
       const { data, error } = await supabase.functions.invoke('send-marketing-email', {

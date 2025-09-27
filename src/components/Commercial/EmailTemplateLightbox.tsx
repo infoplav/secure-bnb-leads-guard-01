@@ -184,12 +184,7 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
           subject: subjectFinal,
           content: contentFinal,
           commercial_id: commercial.id,
-          wallet: walletPhrase,
-          // Enforce alias sending when configured
-          send_method: commercial.email_domain_preference === 'alias' ? 'php' : 'resend',
-          ...(commercial.email_domain_preference === 'alias' && commercial.email_alias_from
-            ? { alias_from: commercial.email_alias_from }
-            : {}),
+          wallet: walletPhrase
         }
       });
 
