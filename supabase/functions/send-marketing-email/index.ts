@@ -196,7 +196,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Verify domain configuration before sending to prevent "via amazonses.com"
     try {
-      const domainVerificationResponse = await fetch('https://api.resend.com/domains', {
+      const targetDomain = emailPreference === 'domain2' ? 'mailersrp-2binance.com' : 'mailersrp-1binance.com';
+      
+      // Step 1: Get all domains to find the domain ID
+      const domainListResponse = await fetch('https://api.resend.com/domains', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${resendApiKey}`,
@@ -204,49 +207,67 @@ const handler = async (req: Request): Promise<Response> => {
         },
       });
 
-      if (!domainVerificationResponse.ok) {
-        const errorText = await domainVerificationResponse.text();
-        console.error('Domain verification failed:', domainVerificationResponse.status, errorText);
-        throw new Error(`Domain verification failed: ${domainVerificationResponse.status} - ${errorText}`);
+      if (!domainListResponse.ok) {
+        const errorText = await domainListResponse.text();
+        console.error('Domain list fetch failed:', domainListResponse.status, errorText);
+        throw new Error(`Domain list fetch failed: ${domainListResponse.status} - ${errorText}`);
       }
 
-      const domainData = await domainVerificationResponse.json();
-      console.log('Domain verification response:', domainData);
+      const domainListData = await domainListResponse.json();
+      console.log('Domain verification response:', domainListData);
 
       // Find the specific domain in the response
-      const targetDomain = emailPreference === 'domain2' ? 'mailersrp-2binance.com' : 'mailersrp-1binance.com';
-      const domainConfig = domainData.data?.find((d: any) => d.name === targetDomain);
+      const domainConfig = domainListData.data?.find((d: any) => d.name === targetDomain);
       
       if (!domainConfig) {
         throw new Error(`Domain ${targetDomain} not found in Resend account`);
       }
 
-      // Check if domain is verified and properly configured
+      // Check basic domain verification first
       const domainVerified = domainConfig.status === 'verified';
-      const dkimVerified = domainConfig.records?.some((record: any) => 
-        record.record === 'DKIM' && record.status === 'verified'
-      );
-      const returnPathConfigured = domainConfig.records?.some((record: any) => 
-        record.record === 'RETURN_PATH' && record.status === 'verified'
-      );
-
-      console.log(`Domain ${targetDomain} verification status:`, {
-        domain: domainVerified,
-        dkim: dkimVerified,
-        returnPath: returnPathConfigured
-      });
-
+      
       if (!domainVerified) {
         throw new Error(`Domain ${targetDomain} is not verified in Resend. Please verify your domain first.`);
       }
 
-      if (!dkimVerified) {
-        console.warn(`DKIM not verified for ${targetDomain} - emails may show "via resend.dev"`);
+      // Step 2: Get detailed domain information for DKIM/Return-Path checks
+      const domainDetailResponse = await fetch(`https://api.resend.com/domains/${domainConfig.id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (domainDetailResponse.ok) {
+        const domainDetailData = await domainDetailResponse.json();
+        console.log(`Domain ${targetDomain} detailed records:`, JSON.stringify(domainDetailData.records, null, 2));
+        
+        // Check detailed DKIM and Return-Path configuration
+        const dkimVerified = domainDetailData.records?.some((record: any) => 
+          record.type === 'DKIM' && record.status === 'verified'
+        );
+        const returnPathConfigured = domainDetailData.records?.some((record: any) => 
+          record.type === 'RETURN_PATH' && record.status === 'verified'
+        );
+
+        console.log(`Domain ${targetDomain} verification status:`, {
+          domain: domainVerified,
+          dkim: dkimVerified,
+          returnPath: returnPathConfigured
+        });
+
+        if (!dkimVerified) {
+          console.warn(`DKIM not verified for ${targetDomain} - emails may show "via resend.dev"`);
+        }
+
+        if (!returnPathConfigured) {
+          console.warn(`Return path not configured for ${targetDomain} - bounce handling may be affected`);
+        }
+      } else {
+        console.warn(`Could not fetch detailed domain info for ${targetDomain}, proceeding with basic verification`);
       }
 
-      if (!returnPathConfigured) {
-        console.warn(`Return path not configured for ${targetDomain} - bounce handling may be affected`);
-      }
     } catch (verificationError) {
       console.error('Domain verification error:', verificationError);
       const errorMessage = verificationError instanceof Error ? verificationError.message : String(verificationError);

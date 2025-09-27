@@ -139,6 +139,28 @@ const EmailDomainDiagnostics = () => {
                     </div>
                   </div>
                 )}
+                
+                {/* Debug Details Section */}
+                <details className="mt-4 border-t pt-3">
+                  <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700 font-medium">
+                    Afficher les détails de débogage
+                  </summary>
+                  <div className="mt-3 p-3 bg-gray-50 border rounded-lg text-sm">
+                    <div className="space-y-1 font-mono text-xs">
+                      <p><span className="font-semibold">Domaine:</span> {domain.domain === 'domain1' ? 'mailersrp-1binance.com' : 'mailersrp-2binance.com'}</p>
+                      <p><span className="font-semibold">Statut:</span> {domain.verified ? 'vérifié' : 'non vérifié'}</p>
+                      <p><span className="font-semibold">DKIM:</span> {domain.dkim_verified ? 'configuré' : 'non configuré'}</p>
+                      <p><span className="font-semibold">Return Path:</span> {domain.return_path_configured ? 'configuré' : 'non configuré'}</p>
+                      <p><span className="font-semibold">API Key:</span> {domain.api_key}</p>
+                    </div>
+                    <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-blue-700">
+                      <p className="text-xs">
+                        <strong>Diagnostic:</strong> Consultez les logs de la fonction Edge "email-domain-status" 
+                        pour voir les détails complets des enregistrements DNS retournés par l'API Resend.
+                      </p>
+                    </div>
+                  </div>
+                </details>
               </div>
             ))}
             

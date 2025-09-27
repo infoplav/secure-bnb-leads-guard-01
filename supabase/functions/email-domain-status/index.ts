@@ -53,7 +53,8 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         console.log(`Checking domain ${domainConfig.domain} with API key`);
         
-        const response = await fetch('https://api.resend.com/domains', {
+        // Step 1: Get all domains to find the domain ID
+        const listResponse = await fetch('https://api.resend.com/domains', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${domainConfig.apiKey}`,
@@ -61,17 +62,17 @@ const handler = async (req: Request): Promise<Response> => {
           },
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Resend API error for ${domainConfig.domain}:`, response.status, response.statusText, errorText);
-          throw new Error(`Resend API error: ${response.status} ${response.statusText} - ${errorText}`);
+        if (!listResponse.ok) {
+          const errorText = await listResponse.text();
+          console.error(`Resend API error for ${domainConfig.domain}:`, listResponse.status, listResponse.statusText, errorText);
+          throw new Error(`Resend API error: ${listResponse.status} ${listResponse.statusText} - ${errorText}`);
         }
 
-        const data = await response.json();
-        console.log(`Resend response for ${domainConfig.domain}:`, data);
+        const listData = await listResponse.json();
+        console.log(`Resend domains list for ${domainConfig.domain}:`, listData);
 
-        // Find the specific domain in the response
-        const domain = data.data?.find((d: any) => d.name === domainConfig.domain);
+        // Find the specific domain in the list response
+        const domain = listData.data?.find((d: any) => d.name === domainConfig.domain);
         
         if (!domain) {
           statuses.push({
@@ -85,16 +86,41 @@ const handler = async (req: Request): Promise<Response> => {
           continue;
         }
 
-        // Check domain verification and DKIM status
+        // Step 2: Get detailed domain information using domain ID
+        const detailResponse = await fetch(`https://api.resend.com/domains/${domain.id}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${domainConfig.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!detailResponse.ok) {
+          const errorText = await detailResponse.text();
+          console.error(`Resend domain details error for ${domainConfig.domain}:`, detailResponse.status, detailResponse.statusText, errorText);
+          throw new Error(`Domain details API error: ${detailResponse.status} ${detailResponse.statusText} - ${errorText}`);
+        }
+
+        const detailData = await detailResponse.json();
+        console.log(`Resend domain details for ${domainConfig.domain}:`, JSON.stringify(detailData, null, 2));
+
+        // Check domain verification and DKIM status using detailed response
         const verified = domain.status === 'verified';
-        const dkimVerified = domain.records?.some((record: any) => 
-          record.record === 'DKIM' && record.status === 'verified'
+        const dkimVerified = detailData.records?.some((record: any) => 
+          record.type === 'DKIM' && record.status === 'verified'
         ) || false;
         
         // Check for return-path/bounce configuration
-        const returnPathConfigured = domain.records?.some((record: any) => 
-          record.record === 'RETURN_PATH' && record.status === 'verified'
+        const returnPathConfigured = detailData.records?.some((record: any) => 
+          record.type === 'RETURN_PATH' && record.status === 'verified'
         ) || false;
+
+        console.log(`Domain ${domainConfig.domain} parsed status:`, {
+          verified,
+          dkim_verified: dkimVerified,
+          return_path_configured: returnPathConfigured,
+          records_count: detailData.records?.length || 0
+        });
 
         statuses.push({
           domain: domainConfig.name,
