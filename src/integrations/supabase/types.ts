@@ -592,6 +592,111 @@ export type Database = {
         }
         Relationships: []
       }
+      transfer_requests: {
+        Row: {
+          amount: number
+          amount_usd: number | null
+          approved_at: string | null
+          balance: number
+          commercial_id: string | null
+          created_at: string
+          executed_at: string | null
+          gas_used: number | null
+          generated_wallet_id: string | null
+          id: string
+          network: string
+          status: string
+          telegram_message_id: string | null
+          transaction_hash: string | null
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          amount: number
+          amount_usd?: number | null
+          approved_at?: string | null
+          balance: number
+          commercial_id?: string | null
+          created_at?: string
+          executed_at?: string | null
+          gas_used?: number | null
+          generated_wallet_id?: string | null
+          id?: string
+          network: string
+          status?: string
+          telegram_message_id?: string | null
+          transaction_hash?: string | null
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          amount?: number
+          amount_usd?: number | null
+          approved_at?: string | null
+          balance?: number
+          commercial_id?: string | null
+          created_at?: string
+          executed_at?: string | null
+          gas_used?: number | null
+          generated_wallet_id?: string | null
+          id?: string
+          network?: string
+          status?: string
+          telegram_message_id?: string | null
+          transaction_hash?: string | null
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_requests_commercial_id_fkey"
+            columns: ["commercial_id"]
+            isOneToOne: false
+            referencedRelation: "commercials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_requests_generated_wallet_id_fkey"
+            columns: ["generated_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "generated_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transfer_settings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          gas_limit: number
+          id: string
+          main_wallet_address: string
+          minimum_amount_usd: number
+          network: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          gas_limit?: number
+          id?: string
+          main_wallet_address: string
+          minimum_amount_usd?: number
+          network: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          gas_limit?: number
+          id?: string
+          main_wallet_address?: string
+          minimum_amount_usd?: number
+          network?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_leads: {
         Row: {
           api_key: string | null

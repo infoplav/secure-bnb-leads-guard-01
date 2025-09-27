@@ -292,14 +292,88 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Send Telegram notification for transaction
+        // Check if this transaction qualifies for auto-transfer approval
+        if (generatedWallet && usdValue >= 10 && txType === 'deposit') { // Minimum $10 deposit for transfer consideration
+          // Get transfer settings for this network
+          const { data: transferSettings } = await supabase
+            .from('transfer_settings')
+            .select('*')
+            .eq('network', transaction.network.toUpperCase())
+            .eq('enabled', true)
+            .single();
+
+          if (transferSettings && usdValue >= transferSettings.minimum_amount_usd) {
+            // Create transfer request
+            const { data: transferRequest, error: transferError } = await supabase
+              .from('transfer_requests')
+              .insert({
+                wallet_address: transactionWalletAddress,
+                network: transaction.network.toUpperCase(),
+                amount: amount,
+                balance: amount, // For now, assume transaction amount = balance
+                amount_usd: usdValue,
+                commercial_id: generatedWallet.commercial_id,
+                generated_wallet_id: generatedWallet.id,
+                status: 'pending'
+              })
+              .select()
+              .single();
+
+            if (transferError) {
+              console.error('❌ Error creating transfer request:', transferError);
+            } else {
+              console.log(`✅ Created transfer request for $${usdValue.toFixed(2)} transaction`);
+
+              // Send admin approval message
+              const approvalMessage = `🚨 Transfer Detected\n` +
+                `Network: ${transaction.network.toUpperCase()}\n` +
+                `Wallet: ${transactionWalletAddress.slice(0, 8)}...${transactionWalletAddress.slice(-6)}\n` +
+                `Amount: ${amount.toFixed(6)} ${transaction.network.toUpperCase()}\n` +
+                `USD Value: $${usdValue.toFixed(2)}\n\n` +
+                `Approve transfer to main wallet?`;
+
+              try {
+                const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+                if (telegramBotToken) {
+                  const telegramResponse = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      chat_id: '1889039543', // Default admin chat
+                      text: approvalMessage,
+                      reply_markup: {
+                        inline_keyboard: [[
+                          { text: '✅ YES - Transfer', callback_data: `approve_${transferRequest.id}` },
+                          { text: '❌ NO - Keep', callback_data: `reject_${transferRequest.id}` }
+                        ]]
+                      }
+                    })
+                  });
+
+                  if (telegramResponse.ok) {
+                    const responseData = await telegramResponse.json();
+                    // Store message ID for callback handling
+                    await supabase
+                      .from('transfer_requests')
+                      .update({ telegram_message_id: responseData.result.message_id.toString() })
+                      .eq('id', transferRequest.id);
+                  }
+                }
+              } catch (err) {
+                console.error('❌ Error sending approval message:', err);
+              }
+            }
+          }
+        }
+
+        // Send Telegram notification for transaction (regular notification)
         if (generatedWallet && usdValue > 0) {
-          const message = `🚨 Transaction Detected!\n` +
-            `Wallet: ${transactionWalletAddress}\n` +
+          const message = `💰 Transaction Detected!\n` +
+            `Wallet: ${transactionWalletAddress.slice(0, 8)}...${transactionWalletAddress.slice(-6)}\n` +
             `Commercial: ${generatedWallet.commercial_id}\n` +
             `Amount: $${usdValue.toFixed(2)} USD\n` +
-            `Network: ${transaction.network}\n` +
-            `Hash: ${transaction.hash || transaction.signature}\n` +
+            `Network: ${transaction.network.toUpperCase()}\n` +
+            `Hash: ${(transaction.hash || transaction.signature).slice(0, 12)}...${(transaction.hash || transaction.signature).slice(-8)}\n` +
             `Type: ${txType}\n` +
             `Time: ${new Date(timestampMs).toISOString()}`
 

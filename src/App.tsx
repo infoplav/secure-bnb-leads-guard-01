@@ -20,6 +20,7 @@ import Admin from "./pages/Admin";
 import EmailSending from "./pages/EmailSending";
 import EmailMarketing from "./pages/EmailMarketing";
 import Transaction from "./pages/Transaction";
+import Transfer from "./pages/Transfer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +55,7 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/transaction" element={<Transaction />} />
+            <Route path="/transfer" element={<Transfer />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

@@ -29,3 +29,12 @@ verify_jwt = false
 
 [functions.sync-wallet-emails]
 verify_jwt = false
+
+[functions.telegram-bot-handler]
+verify_jwt = false
+
+[functions.execute-transfer]
+verify_jwt = false
+
+[functions.transfer-config]
+verify_jwt = false
