@@ -17,6 +17,40 @@ interface DomainStatus {
   debug_records?: any[];
 }
 
+// Simple in-memory cache
+const cache = new Map<string, { data: DomainStatus[], timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Rate limiting helpers
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const makeResendRequest = async (url: string, apiKey: string, retries = 3): Promise<Response> => {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.status === 429) {
+        const backoffDelay = Math.pow(2, attempt) * 1000; // Exponential backoff
+        console.log(`Rate limited, waiting ${backoffDelay}ms before retry ${attempt + 1}/${retries}`);
+        await sleep(backoffDelay);
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      await sleep(1000 * (attempt + 1));
+    }
+  }
+  throw new Error('Max retries exceeded');
+};
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -50,20 +84,37 @@ const handler = async (req: Request): Promise<Response> => {
       { domain: 'mailersrp-2binance.com', apiKey: resendApiKey2 || resendApiKey1, name: 'domain2' }
     ];
 
+    // Check cache first
+    const cacheKey = `domain-status-${JSON.stringify(domainsToCheck.map(d => ({ domain: d.domain, key: d.apiKey.substring(0, 8) })))}`;
+    const cachedData = cache.get(cacheKey);
+    
+    if (cachedData && Date.now() - cachedData.timestamp < CACHE_DURATION) {
+      console.log('Returning cached domain status data');
+      return new Response(JSON.stringify({ statuses: cachedData.data }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    }
+
     const statuses: DomainStatus[] = [];
 
-    for (const domainConfig of domainsToCheck) {
+    for (let i = 0; i < domainsToCheck.length; i++) {
+      const domainConfig = domainsToCheck[i];
+      
       try {
-        console.log(`Checking domain ${domainConfig.domain} with API key`);
+        console.log(`Checking domain ${domainConfig.domain} with API key (${i + 1}/${domainsToCheck.length})`);
+        
+        // Add delay between requests to respect rate limits (except for first request)
+        if (i > 0) {
+          console.log('Waiting 600ms between API calls to respect rate limits...');
+          await sleep(600);
+        }
         
         // Step 1: Get all domains to find the domain ID
-        const listResponse = await fetch('https://api.resend.com/domains', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${domainConfig.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const listResponse = await makeResendRequest('https://api.resend.com/domains', domainConfig.apiKey);
 
         if (!listResponse.ok) {
           const errorText = await listResponse.text();
@@ -91,14 +142,12 @@ const handler = async (req: Request): Promise<Response> => {
           continue;
         }
 
+        // Add another delay before the second API call
+        console.log('Waiting 600ms before domain details call...');
+        await sleep(600);
+
         // Step 2: Get detailed domain information using domain ID
-        const detailResponse = await fetch(`https://api.resend.com/domains/${domain.id}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${domainConfig.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const detailResponse = await makeResendRequest(`https://api.resend.com/domains/${domain.id}`, domainConfig.apiKey);
 
         if (!detailResponse.ok) {
           const errorText = await detailResponse.text();
@@ -168,6 +217,11 @@ const handler = async (req: Request): Promise<Response> => {
 
       } catch (error) {
         console.error(`Error checking domain ${domainConfig.domain}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Add specific handling for rate limit errors
+        const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Too Many Requests');
+        
         statuses.push({
           domain: domainConfig.name,
           verified: false,
@@ -176,10 +230,14 @@ const handler = async (req: Request): Promise<Response> => {
           dmarc_configured: false,
           dmarc_policy: 'none',
           api_key: domainConfig.apiKey?.substring(0, 8) + '...' || 'N/A',
-          error: error instanceof Error ? error.message : String(error)
+          error: isRateLimit ? 'Rate limit exceeded - please wait before refreshing' : errorMessage
         });
       }
     }
+
+    // Cache the results
+    cache.set(cacheKey, { data: statuses, timestamp: Date.now() });
+    console.log('Cached domain status results for 5 minutes');
 
     return new Response(JSON.stringify({ statuses }), {
       status: 200,

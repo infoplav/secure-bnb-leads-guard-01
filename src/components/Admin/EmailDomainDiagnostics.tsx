@@ -30,7 +30,8 @@ const EmailDomainDiagnostics = () => {
       if (error) throw error;
       return data.statuses as DomainStatus[];
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 300000, // Refresh every 5 minutes to avoid rate limits
+    staleTime: 240000, // Consider data fresh for 4 minutes
   });
 
   const getStatusIcon = (status: boolean, error?: string) => {
@@ -54,10 +55,14 @@ const EmailDomainDiagnostics = () => {
         title: "Statut mis à jour",
         description: "Les statuts des domaines ont été actualisés.",
       });
-    } catch (error) {
+    } catch (error: any) {
+      const isRateLimit = error?.message?.includes('429') || error?.message?.includes('rate limit');
+      
       toast({
         title: "Erreur",
-        description: "Impossible de mettre à jour les statuts.",
+        description: isRateLimit 
+          ? "Limite de taux atteinte. Veuillez attendre quelques minutes avant de réessayer."
+          : "Impossible de mettre à jour les statuts.",
         variant: "destructive",
       });
     }
