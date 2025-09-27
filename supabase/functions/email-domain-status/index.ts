@@ -23,8 +23,23 @@ const handler = async (req: Request): Promise<Response> => {
     const resendApiKey1 = Deno.env.get('RESEND_API_KEY');
     const resendApiKey2 = Deno.env.get('RESEND_API_KEY_DOMAIN2');
 
+    console.log('API Key 1 configured:', !!resendApiKey1, resendApiKey1?.substring(0, 8) + '...');
+    console.log('API Key 2 configured:', !!resendApiKey2, resendApiKey2?.substring(0, 8) + '...');
+
     if (!resendApiKey1) {
+      console.error('RESEND_API_KEY not configured');
       throw new Error('RESEND_API_KEY not configured');
+    }
+
+    // Validate API key format
+    if (!resendApiKey1.startsWith('re_')) {
+      console.error('Invalid RESEND_API_KEY format - should start with re_');
+      throw new Error('Invalid RESEND_API_KEY format');
+    }
+
+    if (resendApiKey2 && !resendApiKey2.startsWith('re_')) {
+      console.error('Invalid RESEND_API_KEY_DOMAIN2 format - should start with re_');
+      throw new Error('Invalid RESEND_API_KEY_DOMAIN2 format');
     }
 
     const domainsToCheck = [
@@ -47,7 +62,9 @@ const handler = async (req: Request): Promise<Response> => {
         });
 
         if (!response.ok) {
-          throw new Error(`Resend API error: ${response.status} ${response.statusText}`);
+          const errorText = await response.text();
+          console.error(`Resend API error for ${domainConfig.domain}:`, response.status, response.statusText, errorText);
+          throw new Error(`Resend API error: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         const data = await response.json();
