@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.fix-all-wallet-addresses]
 verify_jwt = false
+
+[functions.repair-wallet-emails]
+verify_jwt = false
+
+[functions.backfill-generated-wallets]
+verify_jwt = false

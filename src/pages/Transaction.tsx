@@ -58,24 +58,26 @@ const Transaction = () => {
   const { data: monitoringData, isLoading, refetch } = useQuery({
     queryKey: ['monitoring-data'],
     queryFn: async () => {
-      const [gwRes, txRes, walletsRes, commercialsRes, scanStateRes, contactsRes, leadsRes] = await Promise.all([
+      // Fetch ALL used wallets first to ensure we show complete data
+      const [allUsedWalletsRes, gwRes, txRes, commercialsRes, scanStateRes, contactsRes, leadsRes] = await Promise.all([
+        supabase
+          .from('wallets')
+          .select('id, wallet_phrase, client_tracking_id, status, used_at, last_balance_check, client_balance, used_by_commercial_id, monitoring_active')
+          .eq('status', 'used'),
         supabase
           .from('generated_wallets')
-          .select('id, eth_address, btc_address, bsc_address, created_at, is_monitoring_active, commercial_id, wallet_id')
+          .select('id, eth_address, btc_address, bsc_address, created_at, is_monitoring_active, commercial_id, wallet_id, seed_phrase')
           .order('created_at', { ascending: false }),
         supabase
           .from('wallet_transactions')
           .select('id, amount, amount_usd, network, transaction_type, token_symbol, transaction_hash, from_address, to_address, timestamp, created_at, notification_sent, price_at_time, block_number, generated_wallet_id, commercial_id')
           .order('created_at', { ascending: false }),
         supabase
-          .from('wallets')
-          .select('id, wallet_phrase, client_tracking_id, status, used_at, last_balance_check, client_balance, used_by_commercial_id'),
-        supabase
           .from('commercials')
           .select('id, name'),
         supabase
           .from('address_scan_state')
-          .select('address, network, last_seen_at, commercial_id')
+          .select('address, network, last_seen_at, commercial_id, generated_wallet_id')
           .eq('network', 'GLOBAL'),
         supabase
           .from('marketing_contacts')
@@ -85,96 +87,102 @@ const Transaction = () => {
           .select('id, username, name, commercial_name')
       ]);
 
+      if (allUsedWalletsRes.error) throw allUsedWalletsRes.error;
       if (gwRes.error) throw gwRes.error;
       if (txRes.error) throw txRes.error;
-      if (walletsRes.error) throw walletsRes.error;
       if (commercialsRes.error) throw commercialsRes.error;
       if (scanStateRes.error) throw scanStateRes.error;
       if (contactsRes.error) throw contactsRes.error;
       if (leadsRes.error) throw leadsRes.error;
 
-      const walletsMap = new Map((walletsRes.data || []).map((w: any) => [w.id, w]));
-      const commercialsMap = new Map((commercialsRes.data || []).map((c: any) => [c.id, c]));
+      const allUsedWallets = allUsedWalletsRes.data || [];
+      const gwByWalletId = new Map((gwRes.data || []).map((gw: any) => [gw.wallet_id, gw]));
       const gwById = new Map((gwRes.data || []).map((g: any) => [g.id, g]));
-      const scanStateMap = new Map((scanStateRes.data || []).map((s: any) => [s.address, s]));
-      const contactsMap = new Map((contactsRes.data || []).map((c: any) => [c.commercial_id, c]));
-      const leadsMap = new Map((leadsRes.data || []).map((l: any) => [l.commercial_name || l.username, l]));
-
-      const txByGwId = new Map<string, any[]>();
-      (txRes.data || []).forEach((tx: any) => {
-        if (!tx.generated_wallet_id) return;
-        const arr = txByGwId.get(tx.generated_wallet_id) || [];
-        arr.push(tx);
-        txByGwId.set(tx.generated_wallet_id, arr);
+      const commercialsMap = new Map((commercialsRes.data || []).map((c: any) => [c.id, c]));
+      const scanStateByGwId = new Map((scanStateRes.data || []).map((s: any) => [s.generated_wallet_id, s]));
+      const contactsByCommercial = new Map();
+      (contactsRes.data || []).forEach((contact: any) => {
+        if (!contactsByCommercial.has(contact.commercial_id)) {
+          contactsByCommercial.set(contact.commercial_id, []);
+        }
+        contactsByCommercial.get(contact.commercial_id).push(contact);
+      });
+      const leadsByCommercial = new Map();
+      (leadsRes.data || []).forEach((lead: any) => {
+        const commercial = (commercialsRes.data || []).find((c: any) => c.name === lead.commercial_name);
+        if (commercial) {
+          if (!leadsByCommercial.has(commercial.id)) {
+            leadsByCommercial.set(commercial.id, []);
+          }
+          leadsByCommercial.get(commercial.id).push(lead);
+        }
       });
 
-      const walletGroups = (gwRes.data || []).map((g: any) => {
-        // Find the most recent scan state for any address of this wallet
-        const addresses = [g.eth_address, g.bsc_address, g.btc_address].filter(Boolean);
-        let lastScanTime = null;
-        
-        addresses.forEach(addr => {
-          const scanState = scanStateMap.get(addr.toLowerCase());
-          if (scanState && scanState.last_seen_at) {
-            const scanTime = new Date(scanState.last_seen_at);
-            if (!lastScanTime || scanTime > lastScanTime) {
-              lastScanTime = scanTime;
-            }
+      const txByGwId = new Map();
+      (txRes.data || []).forEach((tx: any) => {
+        if (tx.generated_wallet_id) {
+          if (!txByGwId.has(tx.generated_wallet_id)) {
+            txByGwId.set(tx.generated_wallet_id, []);
           }
-        });
-
-        const contact = g.commercial_id ? contactsMap.get(g.commercial_id) : undefined;
-        const wallet = g.wallet_id ? walletsMap.get(g.wallet_id) : undefined;
-        const commercial = g.commercial_id ? commercialsMap.get(g.commercial_id) : undefined;
-        
-        // Try to find associated lead by commercial name or client tracking ID
-        let lead = undefined;
-        if (commercial?.name) {
-          lead = leadsMap.get(commercial.name);
+          txByGwId.get(tx.generated_wallet_id).push(tx);
         }
-        if (!lead && wallet?.client_tracking_id) {
-          lead = leadsMap.get(wallet.client_tracking_id);
-        }
+      });
 
-        // Enhanced email detection
-        let displayEmail = wallet?.client_tracking_id;
-        if (!displayEmail || !displayEmail.includes('@')) {
-          // Try contact email
-          if (contact?.email) {
-            displayEmail = contact.email;
-          }
-          // Try lead username if it looks like an email
-          else if (lead?.username && lead.username.includes('@')) {
-            displayEmail = lead.username;
-          }
+
+      // Process ALL used wallets, creating wallet groups for each
+      const walletGroups = allUsedWallets.map((wallet: any) => {
+        const generatedWallet = gwByWalletId.get(wallet.id);
+        const commercial = commercialsMap.get(wallet.used_by_commercial_id);
+        const contact = (contactsByCommercial.get(wallet.used_by_commercial_id) || [])[0];
+        const lead = (leadsByCommercial.get(wallet.used_by_commercial_id) || [])[0];
+        const lastScanTime = generatedWallet ? scanStateByGwId.get(generatedWallet.id)?.last_seen_at : null;
+
+        // Enhanced email detection logic
+        let displayEmail = '';
+        if (wallet?.client_tracking_id && wallet.client_tracking_id.includes('@')) {
+          displayEmail = wallet.client_tracking_id;
+        } else if (contact?.email) {
+          displayEmail = contact.email;
+        } else if (lead?.username && lead.username.includes('@')) {
+          displayEmail = lead.username;
         }
 
         return {
-          ...g,
+          // Use generated wallet data if available, otherwise create placeholder structure
+          id: generatedWallet?.id || `placeholder_${wallet.id}`,
+          wallet_id: wallet.id,
+          commercial_id: wallet.used_by_commercial_id,
+          client_tracking_id: wallet.client_tracking_id,
+          eth_address: generatedWallet?.eth_address || null,
+          bsc_address: generatedWallet?.bsc_address || null,
+          btc_address: generatedWallet?.btc_address || null,
+          seed_phrase: generatedWallet?.seed_phrase || wallet.wallet_phrase,
+          created_at: generatedWallet?.created_at || wallet.used_at,
+          is_monitoring_active: generatedWallet?.is_monitoring_active ?? wallet.monitoring_active,
           _wallet: wallet,
           _commercial: commercial,
           _contact: contact,
           _lead: lead,
-          _transactions: txByGwId.get(g.id) || [],
+          _transactions: generatedWallet ? (txByGwId.get(generatedWallet.id) || []) : [],
           _lastScanTime: lastScanTime,
           _displayEmail: displayEmail,
-          _hasEmail: displayEmail && displayEmail.includes('@')
+          _hasEmail: displayEmail && displayEmail.includes('@'),
+          _hasGeneratedWallet: !!generatedWallet
         };
       });
 
       // Get all used wallets that are actively being monitored
       const fortyEightHoursAgo = new Date(Date.now() - (48 * 60 * 60 * 1000));
       
-      // Filter only used wallets from the main query
+      // All wallet groups are already used wallets, filter by monitoring timeframe
       const activeUsedWallets = walletGroups.filter((group: any) => {
-        return group._wallet?.status === 'used' && 
-               group._wallet?.used_at && 
+        return group._wallet?.used_at && 
                new Date(group._wallet.used_at) > fortyEightHoursAgo;
       });
 
       const allTransactions = (txRes.data || []).map((tx: any) => {
         const g = tx.generated_wallet_id ? gwById.get(tx.generated_wallet_id) : undefined;
-        const _wallet = g?.wallet_id ? walletsMap.get(g.wallet_id) : undefined;
+        const _wallet = g ? allUsedWallets.find(w => w.id === g.wallet_id) : undefined;
         const _commercial = tx.commercial_id
           ? commercialsMap.get(tx.commercial_id)
           : (g?.commercial_id ? commercialsMap.get(g.commercial_id) : undefined);

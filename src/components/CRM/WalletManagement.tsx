@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter, Clock, Settings } from 'lucide-react';
 import { format } from 'date-fns';
 import RepairWalletEmails from './RepairWalletEmails';
+import BackfillGeneratedWallets from './BackfillGeneratedWallets';
 
 const WalletManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -331,8 +332,9 @@ const WalletManagement = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Wallet Management</h2>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <RepairWalletEmails />
+          <BackfillGeneratedWallets />
         </div>
       </div>
 
