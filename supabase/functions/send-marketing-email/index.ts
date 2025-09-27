@@ -129,7 +129,6 @@ serve(async (req) => {
         current_time_minus_10: formattedTime,
         link: trackingLink,
         home_link: homeLink,
-        wallet: '', // Will be replaced later if needed
         ...variables // Custom variables override defaults
       };
 
@@ -147,7 +146,7 @@ serve(async (req) => {
     emailContent = replaceVariables(emailContent || '<p>Hello {{name}},</p><p>Thank you for your interest.</p>');
 
     // Add wallet if content contains wallet placeholder and commercial has auto_include_wallet enabled
-    if ((emailContent.includes('{{wallet}}') || emailContent.includes('{{ wallet }}'))) {
+    if (/\{\{\s*wallet\s*\}\}/i.test(emailContent)) {
       console.log(`📧 Email template contains wallet variable for commercial ${commercial.name}`);
       
       // Check if commercial has auto_include_wallet enabled
