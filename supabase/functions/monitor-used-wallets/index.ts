@@ -16,10 +16,10 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    console.log('Starting monitoring for all used wallets...')
+    console.log('Starting monitoring for actively used wallets (12-hour window)...')
 
-    // Get all used wallets that are still within 48-hour monitoring window
-    const fortyEightHoursAgo = new Date(Date.now() - (48 * 60 * 60 * 1000))
+    // Get all used wallets that are still within 12-hour active monitoring window
+    const twelveHoursAgo = new Date(Date.now() - (12 * 60 * 60 * 1000))
     
     const { data: usedWallets, error: walletsError } = await supabase
       .from('wallets')
@@ -32,24 +32,24 @@ Deno.serve(async (req) => {
         generated_wallets!inner(*)
       `)
       .eq('status', 'used')
-      .gte('used_at', fortyEightHoursAgo.toISOString())
+      .gte('used_at', twelveHoursAgo.toISOString())
 
     if (walletsError) {
       throw new Error(`Error fetching used wallets: ${walletsError.message}`)
     }
 
     if (!usedWallets || usedWallets.length === 0) {
-      return new Response(
+        return new Response(
         JSON.stringify({ 
           success: true,
-          message: 'No used wallets found within monitoring window',
+          message: 'No active wallets found within 12-hour monitoring window',
           monitored_wallets: 0
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log(`Found ${usedWallets.length} used wallets to monitor`)
+    console.log(`Found ${usedWallets.length} active wallets to monitor (12-hour window)`)
 
     // Group wallet addresses by commercial for batch scanning
     const scanByCommercial = new Map<string, string[]>()
@@ -108,9 +108,9 @@ Deno.serve(async (req) => {
           totalScanned += addresses.length
         }
 
-        // Rate limiting - wait 3 seconds between commercial scans
+        // Enhanced rate limiting - wait 2-3 seconds between commercial scans
         if (scanByCommercial.size > 1) {
-          await new Promise(resolve => setTimeout(resolve, 3000))
+          await new Promise(resolve => setTimeout(resolve, 2500))
         }
 
       } catch (error) {
@@ -127,11 +127,12 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Monitoring completed for ${totalScanned} wallet addresses across ${scanByCommercial.size} commercials`,
+        message: `Active monitoring completed for ${totalScanned} wallet addresses across ${scanByCommercial.size} commercials (12-hour window)`,
         stats: {
-          used_wallets_found: usedWallets.length,
+          active_wallets_found: usedWallets.length,
           commercials_scanned: scanByCommercial.size,
           total_addresses_scanned: totalScanned,
+          monitoring_window: '12_hours',
           scan_results: scanResults
         }
       }),

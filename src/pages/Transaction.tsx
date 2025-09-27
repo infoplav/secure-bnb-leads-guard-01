@@ -18,9 +18,8 @@ const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedNetwork, setSelectedNetwork] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [autoScan, setAutoScan] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedWallets, setSelectedWallets] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
   // Update time every minute for countdown
@@ -31,28 +30,6 @@ const Transaction = () => {
 
     return () => clearInterval(interval);
   }, []);
-
-  // Auto refresh every 30 seconds if enabled
-  useEffect(() => {
-    if (!autoRefresh) return;
-    
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, queryClient]);
-
-  // Auto monitor used wallets every 2 minutes if enabled
-  useEffect(() => {
-    if (!autoScan) return;
-    
-    const interval = setInterval(() => {
-      monitorUsedWalletsMutation.mutate();
-    }, 120000); // 2 minutes
-
-    return () => clearInterval(interval);
-  }, [autoScan]);
 
   // Fetch unified monitoring data with wallet groups and their transactions
   const { data: monitoringData, isLoading, refetch } = useQuery({
@@ -128,7 +105,6 @@ const Transaction = () => {
         }
       });
 
-
       // Process ALL used wallets, creating wallet groups for each
       const walletGroups = allUsedWallets.map((wallet: any) => {
         const generatedWallet = gwByWalletId.get(wallet.id);
@@ -164,13 +140,38 @@ const Transaction = () => {
         };
       });
 
-      // Get all used wallets that are actively being monitored
-      const fortyEightHoursAgo = new Date(Date.now() - (48 * 60 * 60 * 1000));
+      // Get wallet monitoring status (Active: 0-12h, View-Only: 12-48h, Expired: 48h+)
+      const now = new Date();
+      const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000));
+      const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
       
-      // All wallet groups are already used wallets, filter by monitoring timeframe
-      const activeUsedWallets = walletGroups.filter((group: any) => {
-        return group._wallet?.used_at && 
-               new Date(group._wallet.used_at) > fortyEightHoursAgo;
+      // Add monitoring status to each wallet group
+      const walletGroupsWithStatus = walletGroups.map((group: any) => {
+        const usedAt = group._wallet?.used_at ? new Date(group._wallet.used_at) : null;
+        let monitoringStatus = 'expired';
+        let statusColor = 'destructive';
+        
+        if (usedAt) {
+          if (usedAt > twelveHoursAgo) {
+            monitoringStatus = 'active';
+            statusColor = 'default';
+          } else if (usedAt > fortyEightHoursAgo) {
+            monitoringStatus = 'view-only';
+            statusColor = 'secondary';
+          }
+        }
+        
+        return {
+          ...group,
+          _monitoringStatus: monitoringStatus,
+          _statusColor: statusColor,
+          _timeLeft: usedAt ? Math.max(0, twelveHoursAgo.getTime() - usedAt.getTime()) : 0
+        };
+      });
+      
+      // Filter active wallets (within 12-hour window)
+      const activeUsedWallets = walletGroupsWithStatus.filter((group: any) => {
+        return group._monitoringStatus === 'active';
       });
 
       const allTransactions = (txRes.data || []).map((tx: any) => {
@@ -182,9 +183,9 @@ const Transaction = () => {
         return { ...tx, _walletGroup: g, _wallet, _commercial };
       });
 
-      return { walletGroups, allTransactions, activeUsedWallets };
+      return { walletGroups: walletGroupsWithStatus, allTransactions, activeUsedWallets };
     },
-    refetchInterval: autoRefresh ? 30000 : false
+    refetchInterval: false // Manual refresh only
   });
 
   // Helper: derive networks based on available addresses
@@ -218,7 +219,7 @@ const Transaction = () => {
     }
   });
 
-  // Monitor used wallets mutation
+  // Monitor used wallets mutation (now scans 12-hour window)
   const monitorUsedWalletsMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.functions.invoke('monitor-used-wallets', {
@@ -227,11 +228,11 @@ const Transaction = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Used wallet monitoring initiated");
+      toast.success("Active wallet monitoring initiated (12-hour window)");
       queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
     },
     onError: (error) => {
-      toast.error("Failed to start used wallet monitoring");
+      toast.error("Failed to start active wallet monitoring");
       console.error('Monitor error:', error);
     }
   });
@@ -241,25 +242,27 @@ const Transaction = () => {
     mutationFn: async () => {
       if (!monitoringData?.walletGroups?.length) return;
       
-      const scanPromises = monitoringData.walletGroups.map(group => 
-        supabase.functions.invoke('scan-wallet-transactions', {
-          body: {
-            wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
-            commercial_id: group.commercial_id,
-            networks: deriveNetworks(group)
-          }
-        })
-      );
+      const scanPromises = monitoringData.walletGroups
+        .filter((group: any) => group._monitoringStatus === 'active')
+        .map(group => 
+          supabase.functions.invoke('scan-wallet-transactions', {
+            body: {
+              wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
+              commercial_id: group.commercial_id,
+              networks: deriveNetworks(group)
+            }
+          })
+        );
       
       await Promise.all(scanPromises);
     },
     onSuccess: () => {
-      toast.success("All wallets scan initiated");
+      toast.success("Active wallets scan initiated");
       queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
     },
     onError: (error) => {
-      toast.error("Failed to scan all wallets");
-      console.error('Scan all error:', error);
+      toast.error("Failed to scan active wallets");
+      console.error('Scan active error:', error);
     }
   });
 
@@ -305,7 +308,7 @@ const Transaction = () => {
         });
         if (error) throw error;
         // brief delay to avoid provider rate limits
-        await new Promise(res => setTimeout(res, 1500));
+        await new Promise(res => setTimeout(res, 2000));
       }
     },
     onSuccess: () => {
@@ -442,9 +445,8 @@ const Transaction = () => {
   };
 
   const getWalletAddress = (transaction: any) => {
-    if (transaction.to_address) return transaction.to_address;
-    const { network } = transaction;
     const gw = transaction._walletGroup;
+    const network = transaction.network;
     if (gw) {
       if (network === 'BSC') return gw.bsc_address;
       if (network === 'ETH') return gw.eth_address;
@@ -464,13 +466,20 @@ const Transaction = () => {
   };
 
   const getWalletStatus = (group: any) => {
-    const hasRecentTransaction = group._transactions?.some((tx: any) => 
-      new Date(tx.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
-    );
+    // Use the new monitoring status from the processed data
+    const status = group._monitoringStatus || 'expired';
+    const statusColor = group._statusColor || 'destructive';
     
-    if (!group.is_monitoring_active) return { status: "inactive", color: "secondary" };
-    if (hasRecentTransaction) return { status: "active", color: "default" };
-    return { status: "monitoring", color: "outline" };
+    const statusLabels = {
+      'active': 'Active (Monitoring)',
+      'view-only': 'View-Only (12-48h)',
+      'expired': 'Expired (&gt;48h)'
+    };
+    
+    return { 
+      status: statusLabels[status as keyof typeof statusLabels] || status, 
+      color: statusColor 
+    };
   };
 
   const formatTimeAgo = (date: string) => {
@@ -497,20 +506,32 @@ const Transaction = () => {
     });
   };
 
-  // Calculate remaining monitoring time for used wallets
+  // Calculate remaining active monitoring time (12h) or view-only time (48h)
   const getMonitoringTimeLeft = (usedAt: string) => {
     if (!usedAt) return null;
     
     const usedDate = new Date(usedAt);
-    const monitoringEndDate = new Date(usedDate.getTime() + (48 * 60 * 60 * 1000)); // 48 hours
-    const timeLeft = monitoringEndDate.getTime() - currentTime.getTime();
+    const activeEndDate = new Date(usedDate.getTime() + (12 * 60 * 60 * 1000)); // 12 hours
+    const totalEndDate = new Date(usedDate.getTime() + (48 * 60 * 60 * 1000)); // 48 hours
+    const now = currentTime.getTime();
     
-    if (timeLeft <= 0) return "Monitoring ended";
+    // Check if still in active monitoring (0-12h)
+    if (now < activeEndDate.getTime()) {
+      const timeLeft = activeEndDate.getTime() - now;
+      const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+      const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+      return `${hours}h ${minutes}min (Active)`;
+    }
     
-    const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+    // Check if in view-only period (12-48h)
+    if (now < totalEndDate.getTime()) {
+      const timeLeft = totalEndDate.getTime() - now;
+      const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+      const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+      return `${hours}h ${minutes}min (View-Only)`;
+    }
     
-    return `${hours}h ${minutes}min`;
+    return "Expired (&gt;48h)";
   };
 
   return (
@@ -522,24 +543,17 @@ const Transaction = () => {
               <Activity className="w-8 h-8 text-primary" />
               Transaction Monitor
             </h1>
-            <p className="text-muted-foreground">Real-time wallet transaction monitoring dashboard</p>
+            <p className="text-muted-foreground">Manual wallet transaction monitoring - optimized for cost efficiency</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setAutoRefresh(!autoRefresh)}
+              onClick={() => refetch()}
+              disabled={isLoading}
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${autoRefresh ? 'animate-spin' : ''}`} />
-              {autoRefresh ? 'Auto Refresh' : 'Manual Refresh'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAutoScan(!autoScan)}
-            >
-              <Play className={`w-4 h-4 mr-2 ${autoScan ? 'text-green-600' : ''}`} />
-              {autoScan ? 'Auto Scan ON' : 'Auto Scan OFF'}
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh Data
             </Button>
             <Button 
               variant="outline" 
@@ -548,7 +562,16 @@ const Transaction = () => {
               disabled={monitorUsedWalletsMutation.isPending}
             >
               <Wallet2 className={`w-4 h-4 mr-2 ${monitorUsedWalletsMutation.isPending ? 'animate-spin' : ''}`} />
-              Monitor Used
+              Scan Active Wallets (12h)
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => scanAllWalletsMutation.mutate()}
+              disabled={scanAllWalletsMutation.isPending || !monitoringData?.walletGroups?.length}
+            >
+              <Activity className={`w-4 h-4 mr-2 ${scanAllWalletsMutation.isPending ? 'animate-spin' : ''}`} />
+              Scan All Visible
             </Button>
             <Button 
               variant="outline" 
@@ -556,19 +579,56 @@ const Transaction = () => {
               onClick={() => regenerateBitcoinMutation.mutate()}
               disabled={regenerateBitcoinMutation.isPending}
             >
-              <Activity className={`w-4 h-4 mr-2 ${regenerateBitcoinMutation.isPending ? 'animate-spin' : ''}`} />
-              Fix BTC
+              <RefreshCw className={`w-4 h-4 mr-2 ${regenerateBitcoinMutation.isPending ? 'animate-spin' : ''}`} />
+              Regen BTC
             </Button>
-            <Button variant="outline" onClick={() => refetch()}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
-            <Button>
-              <Download className="w-4 h-4 mr-2" />
-              Export
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => scanLastFiveFullMutation.mutate()}
+              disabled={scanLastFiveFullMutation.isPending}
+            >
+              <Eye className={`w-4 h-4 mr-2 ${scanLastFiveFullMutation.isPending ? 'animate-spin' : ''}`} />
+              Full Scan Last 5
             </Button>
           </div>
         </div>
+
+        {/* Cost Monitoring Dashboard */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Cost Monitoring &amp; API Usage</CardTitle>
+            <CardDescription>Track API calls and estimated costs for transaction monitoring</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-primary">
+                  {monitoringData?.activeUsedWallets?.length || 0}
+                </div>
+                <p className="text-xs text-muted-foreground">Active Wallets (12h)</p>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-secondary">
+                  {monitoringData?.walletGroups?.filter((g: any) => g._monitoringStatus === 'view-only').length || 0}
+                </div>
+                <p className="text-xs text-muted-foreground">View-Only (12-48h)</p>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-muted-foreground">
+                  {monitoringData?.walletGroups?.filter((g: any) => g._monitoringStatus === 'expired').length || 0}
+                </div>
+                <p className="text-xs text-muted-foreground">Expired (&gt;48h)</p>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-accent">
+                  Manual Only
+                </div>
+                <p className="text-xs text-muted-foreground">Scan Mode</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -576,8 +636,10 @@ const Transaction = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-2xl font-bold">{monitoringData?.activeUsedWallets?.length || 0}</div>
-                  <p className="text-xs text-muted-foreground">Used Wallets Monitored</p>
+                  <div className="text-2xl font-bold">
+                    {monitoringData?.walletGroups?.length || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Total Wallets</p>
                 </div>
                 <Wallet2 className="w-8 h-8 text-primary" />
               </div>
@@ -587,7 +649,9 @@ const Transaction = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-2xl font-bold">{monitoringData?.allTransactions?.length || 0}</div>
+                  <div className="text-2xl font-bold">
+                    {monitoringData?.allTransactions?.length || 0}
+                  </div>
                   <p className="text-xs text-muted-foreground">Total Transactions</p>
                 </div>
                 <Activity className="w-8 h-8 text-secondary" />
@@ -667,6 +731,20 @@ const Transaction = () => {
           </TabsList>
           
           <TabsContent value="monitoring" className="space-y-4">
+            <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <span className="text-sm">Active (0-12h): Scanning available</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <span className="text-sm">View-Only (12-48h): Data visible</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                <span className="text-sm">Expired (&gt;48h): Will be cleaned</span>
+              </div>
+            </div>
             <div className="grid gap-4">
               {getFilteredWalletGroups().filter((group: any) => {
                 // Show only used wallets that are being monitored
@@ -704,15 +782,28 @@ const Transaction = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant={status.color as any}>{status.status}</Badge>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => scanWalletMutation.mutate(group)}
-                            disabled={scanWalletMutation.isPending}
-                          >
-                            <RefreshCw className={`w-4 h-4 mr-1 ${scanWalletMutation.isPending ? 'animate-spin' : ''}`} />
-                            Scan
-                          </Button>
+                          {group._monitoringStatus === 'active' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => scanWalletMutation.mutate(group)}
+                              disabled={scanWalletMutation.isPending}
+                            >
+                              <RefreshCw className={`w-4 h-4 mr-1 ${scanWalletMutation.isPending ? 'animate-spin' : ''}`} />
+                              Scan Now
+                            </Button>
+                          )}
+                          {group._monitoringStatus !== 'active' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={true}
+                              title="Scanning only available for active wallets (0-12h)"
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              View Only
+                            </Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="outline" size="sm">
@@ -762,7 +853,7 @@ const Transaction = () => {
                         
                         {group._lastScanTime && (
                           <div className="text-sm text-muted-foreground">
-                            Last scan: {formatTimeAgo(group._lastScanTime.toISOString())}
+                            Last scan: {formatTimeAgo(group._lastScanTime)}
                           </div>
                         )}
                         
@@ -826,76 +917,76 @@ const Transaction = () => {
                 ) : (
                   <Table>
                     <TableHeader>
-                       <TableRow>
-                         <TableHead>Time</TableHead>
-                         <TableHead>Network</TableHead>
-                         <TableHead>Type</TableHead>
-                         <TableHead>Hash</TableHead>
-                         <TableHead>From</TableHead>
-                         <TableHead>To</TableHead>
-                         <TableHead>Amount</TableHead>
-                         <TableHead>USD Value</TableHead>
-                         <TableHead>Commercial</TableHead>
-                         <TableHead>Email</TableHead>
-                         <TableHead>Status</TableHead>
-                       </TableRow>
+                      <TableRow>
+                        <TableHead>Hash</TableHead>
+                        <TableHead>Network</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Timestamp</TableHead>
+                        <TableHead>From</TableHead>
+                        <TableHead>To</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>USD Value</TableHead>
+                        <TableHead>Commercial</TableHead>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {getFilteredTransactions().slice(0, 50).map((transaction: any) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell className="text-xs">
-                            {formatDateTime(transaction.timestamp || transaction.created_at)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{transaction.network}</Badge>
-                          </TableCell>
-                          <TableCell>{getTypeBadge(transaction.transaction_type)}</TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {transaction.transaction_hash?.slice(0, 10)}...
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {transaction.from_address?.slice(0, 10)}...
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {getWalletAddress(transaction)?.slice(0, 10)}...
-                          </TableCell>
-                          <TableCell>
-                            {transaction.amount?.toFixed(6)} {getNetworkSymbol(transaction.network, transaction.token_symbol)}
-                          </TableCell>
-                           <TableCell className="font-semibold">
-                             ${transaction.amount_usd?.toFixed(2) || '0.00'}
+                       {getFilteredTransactions().map((transaction: any) => (
+                         <TableRow key={transaction.id}>
+                           <TableCell className="font-mono text-xs">
+                             {transaction.transaction_hash?.slice(0, 10)}...
                            </TableCell>
-                           <TableCell>{transaction._commercial?.name || 'Unknown'}</TableCell>
+                           <TableCell>
+                             <Badge variant="outline">{transaction.network}</Badge>
+                           </TableCell>
+                           <TableCell>{getTypeBadge(transaction.transaction_type)}</TableCell>
                            <TableCell className="text-xs">
-                             {transaction._walletGroup?._displayEmail ||
-                              transaction._wallet?.client_tracking_id ||
-                              <span className="text-muted-foreground">No email</span>}
+                             {formatDateTime(transaction.timestamp || transaction.created_at)}
                            </TableCell>
-                           <TableCell>{getStatusBadge(transaction)}</TableCell>
-                        </TableRow>
-                      ))}
-                       {getFilteredTransactions().length === 0 && (
-                         <TableRow>
-                           <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                             No transactions found matching your filters
+                           <TableCell className="font-mono text-xs">
+                             {transaction.from_address?.slice(0, 10)}...
                            </TableCell>
+                           <TableCell className="font-mono text-xs">
+                             {getWalletAddress(transaction)?.slice(0, 10)}...
+                           </TableCell>
+                           <TableCell>
+                             {transaction.amount?.toFixed(6)} {getNetworkSymbol(transaction.network, transaction.token_symbol)}
+                           </TableCell>
+                            <TableCell className="font-semibold">
+                              ${transaction.amount_usd?.toFixed(2) || '0.00'}
+                            </TableCell>
+                            <TableCell>{transaction._commercial?.name || 'Unknown'}</TableCell>
+                            <TableCell className="text-xs">
+                              {transaction._walletGroup?._displayEmail ||
+                               transaction._wallet?.client_tracking_id ||
+                               <span className="text-muted-foreground">No email</span>}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(transaction)}</TableCell>
                          </TableRow>
-                       )}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="fix-addresses" className="space-y-4">
-            <AddressFixTool />
-            <TriggerWalletScan />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  );
+                       ))}
+                        {getFilteredTransactions().length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                              No transactions found matching your filters
+                            </TableCell>
+                          </TableRow>
+                        )}
+                     </TableBody>
+                   </Table>
+                 )}
+               </CardContent>
+             </Card>
+           </TabsContent>
+           
+           <TabsContent value="fix-addresses" className="space-y-4">
+             <AddressFixTool />
+             <TriggerWalletScan />
+           </TabsContent>
+         </Tabs>
+       </div>
+     </div>
+   );
 };
 
 export default Transaction;
