@@ -295,15 +295,6 @@ serve(async (req) => {
         })
         .eq('id', emailLog.id);
 
-      // Send Telegram notification for important emails
-      if (templateUsed?.name?.toLowerCase().includes('wallet') || emailContent.includes('wallet')) {
-        await supabase.functions.invoke('send-telegram-notification', {
-          body: {
-            message: `📧 Important Email Sent\n🎯 To: ${to}\n👤 Commercial: ${commercial.name}\n📋 Template: ${templateUsed?.name || 'Custom'}\n📊 Tracking: ${trackingId}`
-          }
-        });
-      }
-
       return new Response(
         JSON.stringify({
           success: true,
