@@ -120,6 +120,10 @@ serve(async (req) => {
     const replaceVariables = (text: string): string => {
       if (!text) return '';
       
+      // Prevent premature replacement of the wallet placeholder even if provided by caller
+      const sanitizedVariables = { ...(variables || {}) } as Record<string, unknown>;
+      if ('wallet' in sanitizedVariables) delete (sanitizedVariables as any).wallet;
+      
       const defaultVariables = {
         name: name || first_name || to.split('@')[0],
         first_name: first_name || name || to.split('@')[0],
@@ -129,7 +133,7 @@ serve(async (req) => {
         current_time_minus_10: formattedTime,
         link: trackingLink,
         home_link: homeLink,
-        ...variables // Custom variables override defaults
+        ...sanitizedVariables // Custom variables override defaults (wallet excluded)
       };
 
       let result = text;
