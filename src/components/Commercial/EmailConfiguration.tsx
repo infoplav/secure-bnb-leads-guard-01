@@ -105,34 +105,14 @@ const EmailConfiguration = ({ commercial, onBack, onConfigUpdate }: EmailConfigu
                 <SelectContent className="bg-gray-800 border-gray-700 text-white">
                   <SelectItem value="domain1">Domaine 1 - mailersrp-1binance.com</SelectItem>
                   <SelectItem value="domain2">Domaine 2 - mailersrp-2binance.com</SelectItem>
-                  <SelectItem value="alias">Alias - Via PHP (do_not_reply@mailersp2.binance.com)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-sm text-gray-400">
                 {emailDomain === 'domain1' && 'Envoi direct via le domaine 1 avec Resend API'}
-                {emailDomain === 'domain2' && 'Envoi direct via le domaine 2 avec Resend API'}  
-                {emailDomain === 'alias' && 'Envoi via PHP avec adresse alias personnalisée'}
+                {emailDomain === 'domain2' && 'Envoi direct via le domaine 2 avec Resend API'}
               </p>
             </div>
 
-            {/* Alias Configuration (only shown when alias is selected) */}
-            {emailDomain === 'alias' && (
-              <div className="space-y-2">
-                <Label htmlFor="aliasFrom" className="text-white">Adresse d'expéditeur (alias)</Label>
-                <Input
-                  id="aliasFrom"
-                  type="email"
-                  value={aliasFrom}
-                  onChange={(e) => setAliasFrom(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-white"
-                  placeholder="do_not_reply@mailersp2.binance.com"
-                />
-                <p className="text-sm text-gray-400">
-                  Les emails seront envoyés depuis cette adresse via votre serveur PHP, 
-                  mais apparaîtront comme envoyés "via votre domaine"
-                </p>
-              </div>
-            )}
 
             {/* Information Cards */}
             <div className="grid gap-4 mt-6">
@@ -144,10 +124,10 @@ const EmailConfiguration = ({ commercial, onBack, onConfigUpdate }: EmailConfigu
               </div>
               
               <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                <h3 className="text-purple-400 font-semibold mb-2">Alias via PHP</h3>
+                <h3 className="text-purple-400 font-semibold mb-2">Configuration DNS Requise</h3>
                 <p className="text-sm text-gray-300">
-                  Envoie les emails via votre serveur PHP avec une adresse d'expéditeur personnalisée. 
-                  Les destinataires verront l'email comme provenant de l'alias mais "via votre domaine".
+                  Pour éviter "via amazonses.com" dans Gmail, configurez les DKIM CNAMEs et Return-Path CNAME 
+                  dans votre compte Resend pour chaque domaine utilisé.
                 </p>
               </div>
             </div>

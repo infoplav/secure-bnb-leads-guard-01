@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Edit, Trash2, Plus, Users, TrendingUp, DollarSign, Target, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import EmailDomainDiagnostics from '@/components/Admin/EmailDomainDiagnostics';
 
 const Admin = () => {
   const [editingCommercial, setEditingCommercial] = useState<any>(null);
@@ -326,6 +327,7 @@ const Admin = () => {
           <TabsTrigger value="performance">Performances</TabsTrigger>
           <TabsTrigger value="leads">Leads Marketing</TabsTrigger>
           <TabsTrigger value="balances">Soldes Utilisateurs</TabsTrigger>
+          <TabsTrigger value="email-domains">Domaines Email</TabsTrigger>
         </TabsList>
 
         <TabsContent value="commercials">
@@ -528,6 +530,10 @@ const Admin = () => {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="email-domains">
+          <EmailDomainDiagnostics />
         </TabsContent>
       </Tabs>
 
