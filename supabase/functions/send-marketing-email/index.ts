@@ -64,7 +64,7 @@ serve(async (req) => {
     // Fetch commercial data for email configuration
     const { data: commercial, error: commercialError } = await supabase
       .from('commercials')
-      .select('id, name, email_domain_preference, email_alias_from')
+      .select('id, name, email_domain_preference, email_alias_from, auto_include_wallet')
       .eq('id', commercial_id)
       .single();
 
@@ -146,20 +146,43 @@ serve(async (req) => {
     emailSubject = replaceVariables(emailSubject || 'Important Information');
     emailContent = replaceVariables(emailContent || '<p>Hello {{name}},</p><p>Thank you for your interest.</p>');
 
-    // Add wallet if content contains wallet placeholder
-    if (emailContent.includes('{{wallet}}') || emailContent.includes('{{ wallet }}')) {
-      try {
-        const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
-          body: { commercial_id, client_tracking_id: to }
-        });
-        
-        const walletPhrase = walletData?.wallet || walletData?.phrase || '';
-        if (walletPhrase) {
-          emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
-          console.log('💼 Wallet phrase added to email');
+    // Add wallet if content contains wallet placeholder and commercial has auto_include_wallet enabled
+    if ((emailContent.includes('{{wallet}}') || emailContent.includes('{{ wallet }}'))) {
+      console.log(`📧 Email template contains wallet variable for commercial ${commercial.name}`);
+      
+      // Check if commercial has auto_include_wallet enabled
+      if (commercial.auto_include_wallet) {
+        console.log(`💼 Auto-include wallet is enabled for commercial ${commercial.name}`);
+        try {
+          const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
+            body: { commercial_id, client_tracking_id: to }
+          });
+          
+          if (walletError) {
+            console.error('❌ Wallet fetch error:', walletError);
+            throw walletError;
+          }
+          
+          console.log('🔍 Wallet data received:', { success: walletData?.success, hasWallet: !!walletData?.wallet });
+          
+          const walletPhrase = walletData?.wallet || walletData?.phrase || '';
+          if (walletPhrase && walletData?.success) {
+            emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
+            console.log('💼 Wallet phrase added to email successfully');
+          } else {
+            console.warn('⚠️ No wallet phrase found in response:', walletData);
+            // Replace with placeholder text if wallet not available
+            emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
+          }
+        } catch (error) {
+          console.error('❌ Failed to fetch wallet:', error);
+          // Replace with placeholder text if wallet fetch fails
+          emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
         }
-      } catch (error) {
-        console.warn('Failed to fetch wallet:', error);
+      } else {
+        console.log(`⚠️ Auto-include wallet is disabled for commercial ${commercial.name} - using placeholder`);
+        // Replace with placeholder text if auto_include_wallet is disabled
+        emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Contactez votre commercial pour obtenir votre wallet]');
       }
     }
 
