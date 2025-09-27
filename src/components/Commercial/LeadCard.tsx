@@ -7,6 +7,7 @@ import { Phone, User, Edit2, Check, X, Mail, UserPlus, Send, PhoneOff, Mic, MicO
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import QuickEmailSender from '@/components/EmailMarketing/QuickEmailSender';
 // @ts-ignore - JsSIP types not available
 import * as JsSIP from 'jssip';
 
@@ -32,24 +33,11 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
   const { toast } = useToast();
   const [editingEmail, setEditingEmail] = useState(false);
   const [editEmailValue, setEditEmailValue] = useState(lead.email);
-  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('');
   const [callState, setCallState] = useState<string>('idle');
   const [isMuted, setIsMuted] = useState(false);
   const sipClientRef = useRef<any>(null);
   
-  // Fetch email templates
-  const { data: emailTemplates } = useQuery({
-    queryKey: ['email-templates'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('email_templates')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Fetch email templates is no longer needed since QuickEmailSender handles it
 
   // SIP Client using JsSIP (same as CallScript)
   class RealSIPClient {
@@ -342,54 +330,6 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
     updateLeadEmail(trimmedEmail);
   };
 
-  const handleEmailTemplateSend = async (templateId: string) => {
-    try {
-      const template = emailTemplates?.find(t => t.id === templateId);
-      if (!template) {
-        toast({
-          title: "Erreur",
-          description: "Template non trouvé",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Send email using the marketing email function
-      const { data, error } = await supabase.functions.invoke('send-marketing-email', {
-        body: {
-          leadId: lead.id,
-          templateId: templateId,
-          commercialId: commercial.id,
-        }
-      });
-
-      if (error) throw error;
-      
-      if (!data.success) {
-        throw new Error(data.error || data.details || 'Failed to send email');
-      }
-
-      toast({
-        title: "Email envoyé",
-        description: `Email "${template.subject}" envoyé à ${lead.first_name} ${lead.name}`
-      });
-
-      // Update lead status to indicate contact was made
-      if (lead.status === 'new') {
-        updateLeadStatus('callback');
-      }
-
-      setSelectedEmailTemplate('');
-    } catch (error) {
-      console.error('Error sending email:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible d'envoyer l'email",
-        variant: "destructive"
-      });
-    }
-  };
-
   const handleWebRTCCall = async () => {
     if (callState === 'connected' || callState === 'ringing') {
       // Hang up if already calling or connected
@@ -584,31 +524,29 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
             </Button>
           )}
           
-          {/* Email Templates Dropdown */}
+          {/* Quick Email Sender */}
           <div className="space-y-2">
             <label className="text-xs text-gray-400">Envoyer Email:</label>
-            <div className="flex gap-2">
-              <Select value={selectedEmailTemplate} onValueChange={setSelectedEmailTemplate}>
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white h-8 flex-1">
-                  <SelectValue placeholder="Choisir un template..." />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600 max-h-60">
-                  {emailTemplates?.map((template) => (
-                    <SelectItem key={template.id} value={template.id} className="text-white">
-                      {template.subject}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                onClick={() => selectedEmailTemplate && handleEmailTemplateSend(selectedEmailTemplate)}
-                disabled={!selectedEmailTemplate}
-                className="bg-purple-600 hover:bg-purple-700 px-3 h-8"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
+            <QuickEmailSender
+              lead={lead}
+              commercial={commercial}
+              trigger={
+                <Button
+                  size="sm"
+                  className="w-full bg-purple-600 hover:bg-purple-700"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Envoyer Email
+                </Button>
+              }
+              onEmailSent={() => {
+                // Update lead status to indicate contact was made
+                if (lead.status === 'new') {
+                  updateLeadStatus('callback');
+                }
+                onUpdate();
+              }}
+            />
           </div>
 
           {/* WebRTC Call Button */}
