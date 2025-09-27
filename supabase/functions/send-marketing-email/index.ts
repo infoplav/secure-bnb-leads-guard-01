@@ -186,16 +186,29 @@ serve(async (req) => {
       }
     }
 
+    // Determine sender name based on template type
+    let senderName = 'BINANCE'; // default
+    if (templateUsed && templateUsed.name && templateUsed.name.toUpperCase().includes('TRUST')) {
+      senderName = 'TRUSTWALLET';
+      console.log('📧 Using TRUSTWALLET sender for Trust Wallet template');
+    } else if (emailSubject && emailSubject.includes('[LEDGER]')) {
+      senderName = 'LEDGER';
+      console.log('📧 Using LEDGER sender for Ledger template');
+    } else if (emailSubject && emailSubject.toLowerCase().includes('trustwallet')) {
+      senderName = 'TRUSTWALLET';
+      console.log('📧 Using TRUSTWALLET sender for TrustWallet subject');
+    }
+
     // Determine email domain and API key
     const domainPreference = domain || commercial.email_domain_preference || 'domain1';
     let resendApiKey = '';
     let fromAddress = '';
 
     if (domainPreference === 'domain2') {
-      fromAddress = 'BINANCE <support@mailersrp-2binance.com>';
+      fromAddress = `${senderName} <do_no_reply@mailersrp-2binance.com>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') || '';
     } else {
-      fromAddress = 'BINANCE <support@mailersrp-1binance.com>';
+      fromAddress = `${senderName} <do_no_reply@mailersrp-2binance.com>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY') || '';
     }
 
