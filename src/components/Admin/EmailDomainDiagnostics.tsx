@@ -12,8 +12,11 @@ interface DomainStatus {
   verified: boolean;
   dkim_verified: boolean;
   return_path_configured: boolean;
+  dmarc_configured: boolean;
+  dmarc_policy: string;
   api_key: string;
   error?: string;
+  debug_records?: any[];
 }
 
 const EmailDomainDiagnostics = () => {
@@ -61,7 +64,7 @@ const EmailDomainDiagnostics = () => {
   };
 
   const allDomainsReady = domainStatuses?.every(domain => 
-    domain.verified && domain.dkim_verified && domain.return_path_configured && !domain.error
+    domain.verified && domain.dkim_verified && domain.return_path_configured && domain.dmarc_configured && !domain.error
   );
 
   return (
@@ -137,6 +140,16 @@ const EmailDomainDiagnostics = () => {
                       </div>
                       {getStatusBadge(domain.return_path_configured)}
                     </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(domain.dmarc_configured)}
+                        <span className="text-sm">DMARC Policy</span>
+                      </div>
+                      <Badge variant={domain.dmarc_configured ? "default" : "destructive"}>
+                        {domain.dmarc_configured ? `Policy: ${domain.dmarc_policy}` : "Not Configured"}
+                      </Badge>
+                    </div>
                   </div>
                 )}
                 
@@ -147,12 +160,30 @@ const EmailDomainDiagnostics = () => {
                   </summary>
                   <div className="mt-3 p-3 bg-gray-50 border rounded-lg text-sm">
                     <div className="space-y-1 font-mono text-xs">
-                      <p><span className="font-semibold">Domaine:</span> {domain.domain === 'domain1' ? 'mailersrp-1binance.com' : 'mailersrp-2binance.com'}</p>
+                      <p><span className="font-semibold">Domaine:</span> {domain.domain}</p>
                       <p><span className="font-semibold">Statut:</span> {domain.verified ? 'vérifié' : 'non vérifié'}</p>
                       <p><span className="font-semibold">DKIM:</span> {domain.dkim_verified ? 'configuré' : 'non configuré'}</p>
                       <p><span className="font-semibold">Return Path:</span> {domain.return_path_configured ? 'configuré' : 'non configuré'}</p>
+                      <p><span className="font-semibold">DMARC:</span> {domain.dmarc_configured ? `${domain.dmarc_policy}` : 'non configuré'}</p>
                       <p><span className="font-semibold">API Key:</span> {domain.api_key}</p>
                     </div>
+                    
+                    {domain.debug_records && domain.debug_records.length > 0 && (
+                      <div className="mt-3 p-2 bg-white border rounded">
+                        <p className="font-semibold text-xs mb-2">DNS Records (Resend):</p>
+                        <div className="space-y-1">
+                          {domain.debug_records.map((record: any, idx: number) => (
+                            <div key={idx} className="text-xs font-mono bg-gray-50 p-1 rounded">
+                              <span className="font-semibold text-blue-600">{record.record}</span>: {record.name} = {record.value?.substring(0, 50)}{record.value?.length > 50 ? '...' : ''} 
+                              <span className={`ml-2 px-1 rounded text-xs ${record.status === 'verified' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                {record.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-blue-700">
                       <p className="text-xs">
                         <strong>Diagnostic:</strong> Consultez les logs de la fonction Edge "email-domain-status" 
@@ -175,13 +206,37 @@ const EmailDomainDiagnostics = () => {
                   Cela peut causer l'affichage "via amazonses.com" dans Gmail.
                 </p>
                 <div className="text-sm text-yellow-700">
-                  <p className="font-medium mb-1">Actions requises dans Resend:</p>
+                  <p className="font-medium mb-1">Actions requises:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>Ajoutez les 3 CNAME DKIM (s1, s2, s3._domainkey)</li>
-                    <li>Configurez le CNAME Return-Path/Bounce</li>
+                    {domainStatuses?.some(domain => !domain.verified) && (
+                      <li>Vérifiez les domaines dans Resend</li>
+                    )}
+                    {domainStatuses?.some(domain => !domain.dkim_verified) && (
+                      <li>Ajoutez les enregistrements DKIM CNAME dans votre DNS</li>
+                    )}
+                    {domainStatuses?.some(domain => !domain.return_path_configured) && (
+                      <li>Configurez le CNAME Return-Path dans votre DNS</li>
+                    )}
+                    {domainStatuses?.some(domain => !domain.dmarc_configured) && (
+                      <li>Ajoutez un enregistrement DMARC: _dmarc.{domainStatuses.find(d => !d.dmarc_configured)?.domain} TXT "v=DMARC1; p=quarantine; rua=mailto:dmarc@{domainStatuses.find(d => !d.dmarc_configured)?.domain}"</li>
+                    )}
                     <li>Attendez la propagation DNS (jusqu'à 48h)</li>
                   </ul>
                 </div>
+              </div>
+            )}
+            
+            {domainStatuses && domainStatuses.every(domain => 
+              domain.verified && domain.dkim_verified && domain.return_path_configured && domain.dmarc_configured
+            ) && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 text-green-700 mb-2">
+                  <CheckCircle className="h-4 w-4" />
+                  <span className="font-medium">Configuration Optimale</span>
+                </div>
+                <p className="text-sm text-green-600">
+                  Tous les domaines sont correctement configurés. Les emails ne devraient plus afficher "via amazonses.com".
+                </p>
               </div>
             )}
           </div>

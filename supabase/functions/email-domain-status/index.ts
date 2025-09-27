@@ -10,8 +10,11 @@ interface DomainStatus {
   verified: boolean;
   dkim_verified: boolean;
   return_path_configured: boolean;
+  dmarc_configured: boolean;
+  dmarc_policy: string;
   api_key: string;
   error?: string;
+  debug_records?: any[];
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -80,6 +83,8 @@ const handler = async (req: Request): Promise<Response> => {
             verified: false,
             dkim_verified: false,
             return_path_configured: false,
+            dmarc_configured: false,
+            dmarc_policy: 'none',
             api_key: domainConfig.apiKey.substring(0, 8) + '...',
             error: `Domain ${domainConfig.domain} not found in Resend account`
           });
@@ -115,10 +120,38 @@ const handler = async (req: Request): Promise<Response> => {
           record.type === 'RETURN_PATH' && record.status === 'verified'
         ) || false;
 
+        // Check DMARC using DNS-over-HTTPS
+        let dmarcConfigured = false;
+        let dmarcPolicy = 'none';
+        try {
+          const dmarcResponse = await fetch(`https://cloudflare-dns.com/dns-query?name=_dmarc.${domainConfig.domain}&type=TXT`, {
+            headers: { 'Accept': 'application/dns-json' }
+          });
+          
+          if (dmarcResponse.ok) {
+            const dmarcData = await dmarcResponse.json();
+            const dmarcRecord = dmarcData.Answer?.find((record: any) => 
+              record.data && record.data.includes('v=DMARC1')
+            );
+            
+            if (dmarcRecord) {
+              dmarcConfigured = true;
+              const policyMatch = dmarcRecord.data.match(/p=([^;]+)/);
+              if (policyMatch) {
+                dmarcPolicy = policyMatch[1];
+              }
+            }
+          }
+        } catch (dmarcError) {
+          console.warn(`DMARC check failed for ${domainConfig.domain}:`, dmarcError);
+        }
+
         console.log(`Domain ${domainConfig.domain} parsed status:`, {
           verified,
           dkim_verified: dkimVerified,
           return_path_configured: returnPathConfigured,
+          dmarc_configured: dmarcConfigured,
+          dmarc_policy: dmarcPolicy,
           records_count: detailData.records?.length || 0
         });
 
@@ -127,7 +160,10 @@ const handler = async (req: Request): Promise<Response> => {
           verified,
           dkim_verified: dkimVerified,
           return_path_configured: returnPathConfigured,
-          api_key: domainConfig.apiKey.substring(0, 8) + '...'
+          dmarc_configured: dmarcConfigured,
+          dmarc_policy: dmarcPolicy,
+          api_key: domainConfig.apiKey.substring(0, 8) + '...',
+          debug_records: detailData.records
         });
 
       } catch (error) {
@@ -137,6 +173,8 @@ const handler = async (req: Request): Promise<Response> => {
           verified: false,
           dkim_verified: false,
           return_path_configured: false,
+          dmarc_configured: false,
+          dmarc_policy: 'none',
           api_key: domainConfig.apiKey?.substring(0, 8) + '...' || 'N/A',
           error: error instanceof Error ? error.message : String(error)
         });

