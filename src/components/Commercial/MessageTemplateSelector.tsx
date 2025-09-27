@@ -99,7 +99,7 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
       const selectedStep = getStepFromTemplate(template.name);
 
     try {
-      const { error } = await supabase.functions.invoke('send-marketing-email', {
+      const { data, error } = await supabase.functions.invoke('send-marketing-email', {
         body: {
           to: lead.email,
           name: lead.name,
@@ -120,6 +120,10 @@ const MessageTemplateSelector = ({ lead, commercial, onBack, onLogout }: Message
       });
 
       if (error) throw error;
+      
+      if (!data.success) {
+        throw new Error(data.error || data.details || 'Failed to send email');
+      }
 
       setEmailStatus('sent');
       toast({

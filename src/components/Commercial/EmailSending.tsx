@@ -134,12 +134,17 @@ const EmailSending: React.FC<EmailSendingProps> = ({ commercial, onBack }) => {
         body: payload
       });
       if (error) throw error;
+      if (!data.success) {
+        throw new Error(data.error || data.details || 'Failed to send email');
+      }
       return data;
     },
-    onSuccess: () => {
-      toast({ title: 'Email envoyé', description: `Email envoyé à ${toEmail}` });
-      setToEmail('');
-      refetchLogs();
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({ title: 'Email envoyé', description: `Email envoyé à ${toEmail}` });
+        setToEmail('');
+        refetchLogs();
+      }
     },
     onError: (err: any) => {
       toast({ title: 'Erreur envoi', description: err?.message || 'Veuillez réessayer', variant: 'destructive' });

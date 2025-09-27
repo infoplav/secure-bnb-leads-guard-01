@@ -173,7 +173,7 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
       const subjectFinal = replaceWalletPlaceholders(replaceVariables(template.subject || ''), walletPhrase);
       const contentFinal = replaceWalletPlaceholders(stripDebugBlocks(replaceVariables(template.content || '')), walletPhrase);
       
-      const { error } = await supabase.functions.invoke('send-marketing-email', {
+      const { data, error } = await supabase.functions.invoke('send-marketing-email', {
         body: {
           to: lead.email,
           name: lead.name,
@@ -194,6 +194,10 @@ const EmailTemplateLightbox = ({ isOpen, onClose, lead, commercial }: EmailTempl
       });
 
       if (error) throw error;
+      
+      if (!data.success) {
+        throw new Error(data.error || data.details || 'Failed to send email');
+      }
 
       setEmailStatus('sent');
       toast({

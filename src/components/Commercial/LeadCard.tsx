@@ -355,20 +355,19 @@ const LeadCard = ({ lead, commercial, isUnassigned = false, onUpdate }: LeadCard
       }
 
       // Send email using the marketing email function
-      const { error } = await supabase.functions.invoke('send-marketing-email', {
+      const { data, error } = await supabase.functions.invoke('send-marketing-email', {
         body: {
           leadId: lead.id,
           templateId: templateId,
           commercialId: commercial.id,
-          // Enforce alias sending when configured
-          send_method: commercial.email_domain_preference === 'alias' ? 'php' : 'resend',
-          ...(commercial.email_domain_preference === 'alias' && commercial.email_alias_from
-            ? { alias_from: commercial.email_alias_from }
-            : {}),
         }
       });
 
       if (error) throw error;
+      
+      if (!data.success) {
+        throw new Error(data.error || data.details || 'Failed to send email');
+      }
 
       toast({
         title: "Email envoyé",

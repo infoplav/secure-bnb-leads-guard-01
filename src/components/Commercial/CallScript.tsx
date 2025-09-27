@@ -145,7 +145,7 @@ const CallScript = ({ lead, commercial, onBack, onLogout, onNextLead, userLead, 
       // Use the database template content and replace variables
       const processedTemplate = replaceVariables(template.content, template.subject) as { content: string; subject: string };
 
-      const { error } = await supabase.functions.invoke('send-marketing-email', {
+      const { data, error } = await supabase.functions.invoke('send-marketing-email', {
         body: {
           to: leadEmail,
           subject: processedTemplate.subject,
@@ -165,6 +165,10 @@ const CallScript = ({ lead, commercial, onBack, onLogout, onNextLead, userLead, 
       });
 
       if (error) throw error;
+      
+      if (!data.success) {
+        throw new Error(data.error || data.details || 'Failed to send email');
+      }
 
       setEmailStatuses(prev => ({ ...prev, [stepKey]: 'sent' }));
       toast({

