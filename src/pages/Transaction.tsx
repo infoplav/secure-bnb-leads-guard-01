@@ -137,15 +137,8 @@ const Transaction = () => {
         const lead = (leadsByCommercial.get(wallet.used_by_commercial_id) || [])[0];
         const lastScanTime = generatedWallet ? scanStateByGwId.get(generatedWallet.id)?.last_seen_at : null;
 
-        // Enhanced email detection logic
-        let displayEmail = '';
-        if (wallet?.client_tracking_id && wallet.client_tracking_id.includes('@')) {
-          displayEmail = wallet.client_tracking_id;
-        } else if (contact?.email) {
-          displayEmail = contact.email;
-        } else if (lead?.username && lead.username.includes('@')) {
-          displayEmail = lead.username;
-        }
+        // Use client_tracking_id directly as the recipient email
+        const displayEmail = wallet.client_tracking_id || 'Unknown';
 
         return {
           // Use generated wallet data if available, otherwise create placeholder structure

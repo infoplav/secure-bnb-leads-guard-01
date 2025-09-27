@@ -10,8 +10,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCw, Search, Eye, Copy, Trash2, Undo2, ArrowRightLeft, Calendar, Filter, Clock, Settings } from 'lucide-react';
 import { format } from 'date-fns';
-import RepairWalletEmails from './RepairWalletEmails';
-import BackfillGeneratedWallets from './BackfillGeneratedWallets';
 
 const WalletManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,35 +73,11 @@ const WalletManagement = () => {
       const { data, error } = await query;
       if (error) throw error;
       
-      // Enhance wallets with additional email information
-      const enhancedWallets = await Promise.all((data || []).map(async (wallet: any) => {
-        let displayEmail = wallet.client_tracking_id;
-        
-        // If no client_tracking_id, try to find email from related data
-        if (!displayEmail && wallet.used_by_commercial_id) {
-          try {
-            // Try to find marketing contact
-            const { data: contact } = await supabase
-              .from('marketing_contacts')
-              .select('email, name')
-              .eq('commercial_id', wallet.used_by_commercial_id)
-              .order('updated_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            
-            if (contact?.email) {
-              displayEmail = contact.email;
-            }
-          } catch (err) {
-            console.warn('Error fetching contact for wallet:', wallet.id, err);
-          }
-        }
-        
-        return {
-          ...wallet,
-          _displayEmail: displayEmail,
-          _hasEmail: !!displayEmail && displayEmail.includes('@')
-        };
+      // Use client_tracking_id directly as it contains the recipient email
+      const enhancedWallets = (data || []).map((wallet: any) => ({
+        ...wallet,
+        _displayEmail: wallet.client_tracking_id || 'Unknown',
+        _hasEmail: !!(wallet.client_tracking_id && wallet.client_tracking_id.includes('@'))
       }));
       
       return enhancedWallets;
@@ -333,8 +307,6 @@ const WalletManagement = () => {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Wallet Management</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <RepairWalletEmails />
-          <BackfillGeneratedWallets />
         </div>
       </div>
 

@@ -25,11 +25,11 @@ serve(async (req) => {
       throw new Error('Commercial ID is required');
     }
 
-    // Use email as the wallet ID - ensure we have client tracking info
-    const walletId = client_tracking_id;
-    console.log(`Get wallet request: commercial_id=${commercial_id}, client_tracking_id=${walletId}`);
+    // Use email as the client tracking ID for direct email tracking
+    const trackingEmail = client_tracking_id;
+    console.log(`Get wallet request: commercial_id=${commercial_id}, client_email=${trackingEmail}`);
 
-    console.log(`Getting new wallet for commercial ${commercial_id}, client ${walletId || 'unknown'} - never reusing wallets`);
+    console.log(`Getting new wallet for commercial ${commercial_id}, client email ${trackingEmail || 'unknown'} - never reusing wallets`);
 
     // Get an available wallet
     const { data: availableWallet, error: walletError } = await supabase
@@ -44,10 +44,10 @@ serve(async (req) => {
       throw new Error('No available wallets found');
     }
 
-    // Mark wallet as used - ensure client_tracking_id is properly set
-    const trackingId = walletId || `commercial_${commercial_id}_${Date.now()}`;
+    // Mark wallet as used - store the actual recipient email in client_tracking_id
+    const finalTrackingId = trackingEmail || `commercial_${commercial_id}_${Date.now()}`;
     
-    console.log(`Updating wallet ${availableWallet.id} with tracking ID: ${trackingId}`);
+    console.log(`Updating wallet ${availableWallet.id} with recipient email: ${finalTrackingId}`);
     
     const { error: updateError } = await supabase
       .from('wallets')
@@ -55,7 +55,7 @@ serve(async (req) => {
         status: 'used',
         used_by_commercial_id: commercial_id,
         used_at: new Date().toISOString(),
-        client_tracking_id: trackingId
+        client_tracking_id: finalTrackingId
       })
       .eq('id', availableWallet.id);
 
