@@ -221,7 +221,7 @@ async function checkForTransferEligibility(supabase: any, transaction: any, tele
 
     // Send Telegram notification if bot token is available
     if (telegramBotToken && transferRequest) {
-      await sendTelegramApprovalMessage(transferRequest, telegramBotToken)
+      await sendTelegramApprovalMessage(transferRequest, telegramBotToken, supabase)
     }
 
   } catch (error) {
@@ -229,7 +229,7 @@ async function checkForTransferEligibility(supabase: any, transaction: any, tele
   }
 }
 
-async function sendTelegramApprovalMessage(transferRequest: any, botToken: string) {
+async function sendTelegramApprovalMessage(transferRequest: any, botToken: string, supabaseClient: any) {
   try {
     // Default admin chat IDs - you can configure these
     const adminChatIds = [-1002339389239] // Add your admin chat IDs here
@@ -272,7 +272,7 @@ Approve transfer to main wallet?`
         console.log(`📱 Telegram notification sent to ${chatId}, message ID: ${result.result.message_id}`)
         
         // Update transfer request with Telegram message ID
-        await supabase
+        await supabaseClient
           .from('transfer_requests')
           .update({ telegram_message_id: result.result.message_id.toString() })
           .eq('id', transferRequest.id)
