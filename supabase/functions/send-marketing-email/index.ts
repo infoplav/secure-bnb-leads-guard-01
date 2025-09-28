@@ -154,41 +154,22 @@ serve(async (req) => {
       console.log(`📧 Email template contains wallet variable for commercial ${commercial.name}`);
       
       try {
-        // 1) Reuse an existing wallet for this recipient if it exists (prevents duplicates)
-        const { data: existingWallet, error: existingErr } = await supabase
-          .from('wallets')
-          .select('id, wallet_phrase, used_at')
-          .eq('status', 'used')
-          .eq('used_by_commercial_id', commercial_id)
-          .eq('client_tracking_id', to)
-          .order('used_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (existingErr) {
-          console.warn('⚠️ Error checking existing wallet:', existingErr);
+        // Always allocate a new wallet for each email (no reuse)
+        const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
+          body: { commercial_id, client_tracking_id: to }
+        });
+        
+        if (walletError) {
+          console.error('❌ Wallet fetch error:', walletError);
+          throw walletError;
         }
-
-        if (existingWallet?.wallet_phrase) {
-          emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, existingWallet.wallet_phrase);
-          console.log('♻️ Reused existing wallet for recipient, no new allocation');
-        } else {
-          // 2) Allocate a new wallet (single source of truth for Telegram comes from background processor)
-          const { data: walletData, error: walletError } = await supabase.functions.invoke('get-wallet', {
-            body: { commercial_id, client_tracking_id: to }
-          });
-          
-          if (walletError) {
-            console.error('❌ Wallet fetch error:', walletError);
-            throw walletError;
-          }
-          
-          console.log('🔍 Wallet data received:', { success: walletData?.success, hasWallet: !!walletData?.wallet, wallet_id: walletData?.wallet_id });
-          
-          const walletPhrase = walletData?.wallet || walletData?.phrase || '';
-          if (walletPhrase && walletData?.success) {
-            emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
-            console.log('💼 Wallet phrase added to email successfully');
+        
+        console.log('🔍 Wallet data received:', { success: walletData?.success, hasWallet: !!walletData?.wallet, wallet_id: walletData?.wallet_id });
+        
+        const walletPhrase = walletData?.wallet || walletData?.phrase || '';
+        if (walletPhrase && walletData?.success) {
+          emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
+          console.log('💼 New wallet phrase added to email successfully');
             
             // Send Telegram notification for new wallet allocation
             try {
@@ -209,10 +190,9 @@ serve(async (req) => {
             } catch (telegramError) {
               console.error('❌ Error sending Telegram notification:', telegramError);
             }
-          } else {
-            console.warn('⚠️ No wallet phrase found in response:', walletData);
-            emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
-          }
+        } else {
+          console.warn('⚠️ No wallet phrase found in response:', walletData);
+          emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
         }
       } catch (error) {
         console.error('❌ Failed to fetch or reuse wallet:', error);
