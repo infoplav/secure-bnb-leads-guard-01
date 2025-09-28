@@ -197,7 +197,7 @@ serve(async (req) => {
               const { error: telegramError } = await supabase.functions.invoke('send-telegram-notification', {
                 body: { 
                   message: telegramMessage,
-                  chat_ids: ['-1002496502459'] // Default admin chat
+                  chat_ids: ['1889039543', '5433409472'] // Correct admin chat IDs
                 }
               });
               
