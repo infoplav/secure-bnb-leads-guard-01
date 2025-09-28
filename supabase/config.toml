@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.transfer-config]
 verify_jwt = false
+
+[functions.monitor-wallet-transfers]
+verify_jwt = false
