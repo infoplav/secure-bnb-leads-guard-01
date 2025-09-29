@@ -522,36 +522,40 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
                       </span>
                     </Button>
                     <div className="flex gap-2">
-                      <Button 
-                        size="lg"
-                        className="bg-blue-600 hover:bg-blue-700 text-white flex-1 sm:flex-initial"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          console.log('🟦 Speed Dial button clicked on dashboard!');
-                          setActiveViewWithLogging('speed-dial');
-                        }}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="hidden sm:inline">Speed Dial</span>
-                          <span className="sm:hidden">Dial</span>
-                          <Phone className="h-4 w-4" />
-                        </span>
-                      </Button>
-                      <Button 
-                        size="lg"
-                        className="bg-green-600 hover:bg-green-700 text-white flex-1 sm:flex-initial"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          console.log('🟢 Multi Call Dialer button clicked on dashboard!');
-                          setActiveViewWithLogging('multi-call-dialer');
-                        }}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="hidden sm:inline">Multi Call</span>
-                          <span className="sm:hidden">Call</span>
-                          <Phone className="h-4 w-4" />
-                        </span>
-                      </Button>
+                      {!commercial.hide_contact_info && (
+                        <>
+                          <Button 
+                            size="lg"
+                            className="bg-blue-600 hover:bg-blue-700 text-white flex-1 sm:flex-initial"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              console.log('🟦 Speed Dial button clicked on dashboard!');
+                              setActiveViewWithLogging('speed-dial');
+                            }}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="hidden sm:inline">Speed Dial</span>
+                              <span className="sm:hidden">Dial</span>
+                              <Phone className="h-4 w-4" />
+                            </span>
+                          </Button>
+                          <Button 
+                            size="lg"
+                            className="bg-green-600 hover:bg-green-700 text-white flex-1 sm:flex-initial"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              console.log('🟢 Multi Call Dialer button clicked on dashboard!');
+                              setActiveViewWithLogging('multi-call-dialer');
+                            }}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="hidden sm:inline">Multi Call</span>
+                              <span className="sm:hidden">Call</span>
+                              <Phone className="h-4 w-4" />
+                            </span>
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
