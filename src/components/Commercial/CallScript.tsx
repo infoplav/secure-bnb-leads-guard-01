@@ -433,9 +433,9 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
             />
           </div>
           
-          {/* Speed Dial - Orange/Yellow Icon (non-blocking) */}
-          <div className="relative flex flex-col items-center animate-fade-in" style={{ animationDelay: '0.1s' }}>
-            {canUseSpeedDial ? (
+          {/* Speed Dial - Only show if contact info is not hidden */}
+          {canUseSpeedDial && (
+            <div className="relative flex flex-col items-center animate-fade-in" style={{ animationDelay: '0.1s' }}>
               <Button
                 onClick={() => setShowMultiCaller(true)}
                 size="lg"
@@ -445,15 +445,11 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
               >
                 <Phone className="h-7 w-7 sm:h-8 sm:w-8" />
               </Button>
-            ) : (
-              <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-gray-600 text-gray-400 flex items-center justify-center border border-gray-500" title="Speed Dial désactivé - contacts masqués">
-                <Phone className="h-7 w-7 sm:h-8 sm:w-8" />
+              <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs sm:text-sm text-gray-400 whitespace-nowrap">
+                Speed Dial Multi
               </div>
-            )}
-            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs sm:text-sm text-gray-400 whitespace-nowrap">
-              {canUseSpeedDial ? 'Speed Dial Multi' : 'Accès restreint'}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Quick Control Panel - Enhanced Responsive */}
@@ -759,8 +755,8 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
           </DialogContent>
         </Dialog>
         
-        {/* Multi Lead Caller */}
-        {showMultiCaller && (
+        {/* Multi Lead Caller - Only show if contact info is not hidden */}
+        {showMultiCaller && canUseSpeedDial && (
           <MultiLeadCaller
             commercial={commercial}
             currentLead={lead}
