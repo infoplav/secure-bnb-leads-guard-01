@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { wallet_addresses, commercial_id, networks, from_date, full_rescan } = await req.json()
+    const { wallet_addresses, commercial_id, networks, from_date, full_rescan, monitoring_mode = false } = await req.json()
     
     if (!wallet_addresses || !Array.isArray(wallet_addresses) || wallet_addresses.length === 0) {
       return new Response(
@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
       : ['BSC', 'ETH']
 
     console.log(`Starting transaction scan for ${wallet_addresses.length} wallets on networks: ${requestedNetworks.join(', ')}`)
+    console.log(`Mode: ${monitoring_mode ? 'AUTOMATIC MONITORING' : 'MANUAL SCAN'} | Full rescan: ${full_rescan}`)
 
     // Normalize and deduplicate wallet addresses
     const uniqueAddresses = [...new Set(wallet_addresses.map(addr => addr.toLowerCase()))]
@@ -104,20 +105,26 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Check if this wallet was scanned recently (within 10 minutes)
+      // Check if this wallet was scanned recently
+      // Monitoring mode uses 2-minute cooldown, manual scans use 10-minute cooldown
       if (!full_rescan) {
+        const cooldownMinutes = monitoring_mode ? 2 : 10
+        const cooldownMs = cooldownMinutes * 60 * 1000
+        
         const { data: recentScans } = await supabase
           .from('address_scan_state')
           .select('last_seen_at')
           .eq('address', walletAddress)
-          .gte('last_seen_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+          .gte('last_seen_at', new Date(Date.now() - cooldownMs).toISOString())
 
         if (recentScans && recentScans.length > 0) {
-          console.log(`Skipping ${walletAddress} - scanned within last 10 minutes`)
+          const lastScanTime = new Date(recentScans[0].last_seen_at)
+          const secondsAgo = Math.round((Date.now() - lastScanTime.getTime()) / 1000)
+          console.log(`⏭️ COOLDOWN SKIP: ${walletAddress} - scanned ${secondsAgo}s ago (cooldown: ${cooldownMinutes}min)`)
           continue
         }
       } else {
-        console.log(`Bypassing cooldown for full rescan of ${walletAddress}`)
+        console.log(`✅ BYPASS: Cooldown bypassed for full rescan of ${walletAddress}`)
       }
 
       // Get or create scan state for incremental scanning
@@ -144,15 +151,23 @@ Deno.serve(async (req) => {
           }
           
           if (network === 'ETH' && isEVMAddress && etherscanApiKey) {
+            console.log(`🔍 Fetching ETH transactions for ${walletAddress}`)
             transactions = await fetchEtherscanTransactions(walletAddress, etherscanApiKey, 'eth', scanState?.last_scanned_block)
+            console.log(`📊 ETH API returned ${transactions.length} transactions`)
           } else if (network === 'BSC' && isEVMAddress && etherscanApiKey) {
+            console.log(`🔍 Fetching BSC transactions for ${walletAddress}`)
             transactions = await fetchEtherscanTransactions(walletAddress, etherscanApiKey, 'bsc', scanState?.last_scanned_block)
+            console.log(`📊 BSC API returned ${transactions.length} transactions`)
           } else if (network === 'BTC' && isBitcoinAddress && blockCypherApiKey) {
+            console.log(`🔍 Fetching BTC transactions for ${walletAddress}`)
             transactions = await fetchBlockCypherTransactions(walletAddress, blockCypherApiKey, scanState?.last_seen_at)
+            console.log(`📊 BTC API returned ${transactions.length} transactions`)
           } else if (network === 'SOL' && isSolanaAddress) {
+            console.log(`🔍 Fetching SOL transactions for ${walletAddress}`)
             transactions = await fetchSolanaTransactions(walletAddress, scanState?.last_signature)
+            console.log(`📊 SOL API returned ${transactions.length} transactions`)
           } else {
-            console.log(`Skipping ${network} for address ${walletAddress} - unsupported combination or missing API key`)
+            console.log(`⏭️ SKIP: ${network} not applicable for ${walletAddress} (address type mismatch or missing API key)`)
             continue
           }
           

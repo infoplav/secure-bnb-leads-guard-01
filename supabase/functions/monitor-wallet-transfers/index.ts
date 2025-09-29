@@ -97,11 +97,13 @@ Deno.serve(async (req) => {
 
     console.log(`🔍 Scanning ${addressesToScan.length} addresses for transactions`)
 
-    // Call scan-wallet-transactions function
+    // Call scan-wallet-transactions function with full_rescan to bypass cooldown for monitoring
     const { data: scanResult, error: scanError } = await supabase.functions.invoke('scan-wallet-transactions', {
       body: {
         wallet_addresses: addressesToScan,
-        networks: ['ETH', 'BSC', 'BTC']
+        networks: ['ETH', 'BSC', 'BTC'],
+        full_rescan: true, // Bypass cooldown for monitoring
+        monitoring_mode: true // Flag to identify this is automatic monitoring
       }
     })
 
