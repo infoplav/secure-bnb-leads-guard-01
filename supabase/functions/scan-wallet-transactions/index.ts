@@ -96,7 +96,11 @@ Deno.serve(async (req) => {
         }
         
         if (shouldSkip) {
-          continue;
+          if (full_rescan) {
+            console.log(`Bypassing 48h age restriction for ${walletAddress} due to full_rescan`);
+          } else {
+            continue;
+          }
         }
       }
 

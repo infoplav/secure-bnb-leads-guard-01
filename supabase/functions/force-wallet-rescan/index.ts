@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     const { data: scanResult, error: scanError } = await supabase.functions.invoke('scan-wallet-transactions', {
       body: {
         wallet_addresses: [wallet_address],
-        networks: ['ETH', 'BSC'],
+        networks: ['ETH', 'BSC', 'BTC'],
         commercial_id: null,
         date_from: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Last 24 hours
         date_to: new Date().toISOString()
