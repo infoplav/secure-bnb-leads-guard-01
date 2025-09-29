@@ -1,5 +1,8 @@
 project_id = "lnokphjzmvdegutjpxhw"
 
+[functions.force-wallet-rescan]
+verify_jwt = false
+
 [functions.email-domain-status]
 verify_jwt = false
 
