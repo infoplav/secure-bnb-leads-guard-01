@@ -15,6 +15,7 @@ export const useCommercialPrivacy = (commercial?: Commercial | null) => {
 
   return {
     shouldHideContactInfo,
-    canUseSpeedDial: !shouldHideContactInfo,
+    canUseSpeedDial: !shouldHideContactInfo, // Only speed dial is restricted
+    canMakeIndividualCalls: true, // Individual calls are always allowed
   };
 };

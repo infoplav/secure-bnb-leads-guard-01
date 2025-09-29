@@ -296,19 +296,6 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
     }
   };
 
-  if (!canUseSpeedDial) {
-    return (
-      <div className="flex flex-col items-center">
-        <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-gray-600 text-gray-400 flex items-center justify-center border border-gray-500" title="Appel désactivé - contacts masqués">
-          <Phone className="h-7 w-7 sm:h-8 sm:w-8" />
-        </div>
-        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs sm:text-sm text-gray-400 whitespace-nowrap">
-          Accès restreint
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col items-center">
       <div className="relative">
