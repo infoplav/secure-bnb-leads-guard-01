@@ -15,6 +15,7 @@ import { getCallScript } from '@/utils/callScriptTranslations';
 import SimpleSipDialer from './SimpleSipDialer';
 import MultiLeadCaller from './MultiLeadCaller';
 import { blurPhoneNumber, blurEmail } from '@/utils/privacyUtils';
+import { useCommercialPrivacy } from '@/hooks/useCommercialPrivacy';
 
 interface CallScriptProps {
   lead: any;
@@ -31,6 +32,7 @@ interface CallScriptProps {
 const CallScript = ({ lead, commercial, onBack, onLogout, onNextLead, userLead, onOpenSpeedDial, onLeadChange, onStatusUpdate }: CallScriptProps) => {
   const { toast } = useToast();
   const { t } = useTranslation(commercial.language || 'fr');
+  const { shouldHideContactInfo, canUseSpeedDial } = useCommercialPrivacy(commercial);
   const [currentStep, setCurrentStep] = useState(1);
   const [responses, setResponses] = useState<{[key: string]: string}>({});
   const [emailStatuses, setEmailStatuses] = useState<{[key: string]: 'idle' | 'sending' | 'sent' | 'error'}>({});
@@ -358,7 +360,7 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
               </h1>
               <div className="space-y-1">
                 <p className="text-sm sm:text-base text-gray-400">
-                  {t('callScript.contact')}: {lead.first_name} {lead.name} - {lead.phone}
+                  {t('callScript.contact')}: {lead.first_name} {lead.name} - {shouldHideContactInfo ? blurPhoneNumber(lead.phone) : lead.phone}
                 </p>
                 <div className="flex items-center gap-2">
                   {isEditingEmail ? (
@@ -391,7 +393,7 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-400">Email: {blurEmail(leadEmail)}</span>
+                      <span className="text-sm text-gray-400">Email: {shouldHideContactInfo ? blurEmail(leadEmail) : leadEmail}</span>
                       <Button
                         onClick={() => setIsEditingEmail(true)}
                         size="sm"
@@ -433,17 +435,23 @@ Cliquez sur "Actualiser le solde" pour une vérification en temps réel.`,
           
           {/* Speed Dial - Orange/Yellow Icon (non-blocking) */}
           <div className="relative flex flex-col items-center animate-fade-in" style={{ animationDelay: '0.1s' }}>
-            <Button
-              onClick={() => setShowMultiCaller(true)}
-              size="lg"
-              className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-yellow-500 hover:bg-yellow-600 text-black p-0 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 active:scale-95"
-              title="Speed Dial - Appel Multiple"
-              aria-label="Ouvrir le Speed Dial Multi-Appels"
-            >
-              <Phone className="h-7 w-7 sm:h-8 sm:w-8" />
-            </Button>
+            {canUseSpeedDial ? (
+              <Button
+                onClick={() => setShowMultiCaller(true)}
+                size="lg"
+                className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-yellow-500 hover:bg-yellow-600 text-black p-0 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 active:scale-95"
+                title="Speed Dial - Appel Multiple"
+                aria-label="Ouvrir le Speed Dial Multi-Appels"
+              >
+                <Phone className="h-7 w-7 sm:h-8 sm:w-8" />
+              </Button>
+            ) : (
+              <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-gray-600 text-gray-400 flex items-center justify-center border border-gray-500" title="Speed Dial désactivé - contacts masqués">
+                <Phone className="h-7 w-7 sm:h-8 sm:w-8" />
+              </div>
+            )}
             <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs sm:text-sm text-gray-400 whitespace-nowrap">
-              Speed Dial Multi
+              {canUseSpeedDial ? 'Speed Dial Multi' : 'Accès restreint'}
             </div>
           </div>
         </div>

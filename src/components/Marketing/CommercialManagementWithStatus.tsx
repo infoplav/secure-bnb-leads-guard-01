@@ -29,6 +29,7 @@ interface Commercial {
   telegram_id?: string;
   auto_include_wallet?: boolean;
   password?: string;
+  hide_contact_info?: boolean;
 }
 
 const CommercialManagementWithStatus = () => {
@@ -47,6 +48,7 @@ const CommercialManagementWithStatus = () => {
   const [editAutoIncludeWallet, setEditAutoIncludeWallet] = useState(false);
   const [editPassword, setEditPassword] = useState('');
   const [editCommissionRate, setEditCommissionRate] = useState(80);
+  const [editHideContactInfo, setEditHideContactInfo] = useState(false);
 
   const { data: commercials, isLoading } = useQuery({
     queryKey: ['commercials-with-status'],
@@ -94,8 +96,8 @@ const CommercialManagementWithStatus = () => {
   });
 
   const updateCommercialMutation = useMutation({
-    mutationFn: async ({ id, name, telegram_id, auto_include_wallet, password, commission_rate }: { id: string; name: string; telegram_id?: string; auto_include_wallet?: boolean; password?: string; commission_rate?: number }) => {
-      const updateData: any = { name, telegram_id, auto_include_wallet, commission_rate };
+    mutationFn: async ({ id, name, telegram_id, auto_include_wallet, password, commission_rate, hide_contact_info }: { id: string; name: string; telegram_id?: string; auto_include_wallet?: boolean; password?: string; commission_rate?: number; hide_contact_info?: boolean }) => {
+      const updateData: any = { name, telegram_id, auto_include_wallet, commission_rate, hide_contact_info };
       if (password && password.trim()) {
         updateData.password = password.trim();
       }
@@ -212,6 +214,7 @@ const CommercialManagementWithStatus = () => {
     setEditAutoIncludeWallet(commercial.auto_include_wallet || false);
     setEditCommissionRate(commercial.commission_rate || 80);
     setEditPassword('');
+    setEditHideContactInfo(commercial.hide_contact_info || false);
   };
 
   const refreshCommercials = () => {
@@ -541,6 +544,17 @@ const CommercialManagementWithStatus = () => {
                 Inclure la phrase secrète dans les notifications Telegram
               </label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="hide-contact-info"
+                checked={editHideContactInfo}
+                onCheckedChange={(checked) => setEditHideContactInfo(checked === true)}
+                className="border-gray-600 data-[state=checked]:bg-red-600"
+              />
+              <label htmlFor="hide-contact-info" className="text-sm text-gray-300">
+                Masquer les numéros et emails (désactive le speed dial)
+              </label>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -557,7 +571,8 @@ const CommercialManagementWithStatus = () => {
                 telegram_id: editTelegramId,
                 auto_include_wallet: editAutoIncludeWallet,
                 password: editPassword,
-                commission_rate: editCommissionRate
+                commission_rate: editCommissionRate,
+                hide_contact_info: editHideContactInfo
               })}
               disabled={!editName || updateCommercialMutation.isPending}
               className="bg-yellow-600 hover:bg-yellow-700 text-black"

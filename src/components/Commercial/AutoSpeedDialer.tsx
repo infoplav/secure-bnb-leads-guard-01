@@ -8,6 +8,7 @@ import { Loader2, Phone, PhoneOff, Users, Play, Square, VolumeX, ArrowRight, Ref
 // @ts-ignore - JsSIP types not available
 import * as JsSIP from 'jssip';
 import CallScript from './CallScript';
+import { useCommercialPrivacy } from '@/hooks/useCommercialPrivacy';
 
 interface AutoSpeedDialerProps {
   open: boolean;
@@ -437,6 +438,7 @@ interface ActiveCall {
 const AutoSpeedDialer: React.FC<AutoSpeedDialerProps> = ({ open, onOpenChange, commercial, initialConcurrency = 3, onLeadConnected }) => {
   console.log('🎯 AutoSpeedDialer rendered', { open, commercial: commercial?.id, initialConcurrency });
   
+  const { canUseSpeedDial } = useCommercialPrivacy(commercial);
   const [concurrency, setConcurrency] = useState(Math.min(5, Math.max(3, initialConcurrency)));
   const [loading, setLoading] = useState(false);
   const [leads, setLeads] = useState<LeadItem[]>([]);
@@ -684,7 +686,12 @@ const AutoSpeedDialer: React.FC<AutoSpeedDialerProps> = ({ open, onOpenChange, c
             </div>
 
             <div className="flex gap-2">
-              {!running ? (
+              {!canUseSpeedDial ? (
+                <div className="text-center py-4 px-6 bg-red-900/20 border border-red-500/30 rounded-lg">
+                  <p className="text-red-400 font-medium">Accès restreint</p>
+                  <p className="text-sm text-gray-400 mt-1">Les contacts sont masqués pour ce commercial</p>
+                </div>
+              ) : !running ? (
                 <Button 
                   onClick={handleStart} 
                   className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-semibold w-full sm:w-auto shadow-lg"

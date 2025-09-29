@@ -11,6 +11,7 @@ import TemplateSelector from './TemplateSelector';
 import ContactEditor from './ContactEditor';
 import ContactStatus from './ContactStatus';
 import BulkReassign from './BulkReassign';
+import { blurEmail, blurPhoneNumber } from '@/utils/privacyUtils';
 
 interface Contact {
   id: string;
@@ -25,6 +26,7 @@ interface Contact {
     id?: string;
     name: string;
     username: string;
+    hide_contact_info?: boolean;
   };
 }
 
@@ -255,10 +257,10 @@ const ContactsList = ({ contacts, isLoading }: ContactsListProps) => {
                     {contact.first_name} {contact.name}
                   </div>
                   <div className="text-sm text-gray-400 mb-1">
-                    {contact.email}
+                    {contact.commercials?.hide_contact_info ? blurEmail(contact.email) : contact.email}
                   </div>
                   <div className="text-sm text-gray-400 mb-2">
-                    {contact.phone}
+                    {contact.commercials?.hide_contact_info ? blurPhoneNumber(contact.phone) : contact.phone}
                   </div>
                   <ContactStatus contact={contact} />
                   {contact.commercials && (

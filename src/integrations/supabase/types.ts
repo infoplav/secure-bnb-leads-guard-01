@@ -154,6 +154,7 @@ export type Database = {
           created_at: string | null
           email_alias_from: string | null
           email_domain_preference: string | null
+          hide_contact_info: boolean | null
           id: string
           is_forced_logout: boolean | null
           language: string
@@ -180,6 +181,7 @@ export type Database = {
           created_at?: string | null
           email_alias_from?: string | null
           email_domain_preference?: string | null
+          hide_contact_info?: boolean | null
           id?: string
           is_forced_logout?: boolean | null
           language?: string
@@ -206,6 +208,7 @@ export type Database = {
           created_at?: string | null
           email_alias_from?: string | null
           email_domain_preference?: string | null
+          hide_contact_info?: boolean | null
           id?: string
           is_forced_logout?: boolean | null
           language?: string

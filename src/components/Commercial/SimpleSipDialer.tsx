@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Phone, PhoneOff, Mic, MicOff, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { useCommercialPrivacy } from '@/hooks/useCommercialPrivacy';
 // @ts-ignore - JsSIP types not available
 import * as JsSIP from 'jssip';
 
@@ -19,6 +20,7 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
   autoCall = false
 }) => {
   const { toast } = useToast();
+  const { canUseSpeedDial } = useCommercialPrivacy(commercial);
   const [callState, setCallState] = useState<'idle' | 'connecting' | 'ringing' | 'connected' | 'ended'>('idle');
   const [isMuted, setIsMuted] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
@@ -293,6 +295,19 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
       default: return isRegistered ? 'Prêt' : 'Connexion SIP...';
     }
   };
+
+  if (!canUseSpeedDial) {
+    return (
+      <div className="flex flex-col items-center">
+        <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-gray-600 text-gray-400 flex items-center justify-center border border-gray-500" title="Appel désactivé - contacts masqués">
+          <Phone className="h-7 w-7 sm:h-8 sm:w-8" />
+        </div>
+        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs sm:text-sm text-gray-400 whitespace-nowrap">
+          Accès restreint
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center">
