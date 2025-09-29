@@ -165,23 +165,23 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
 
   const handleNextLead = async (completedSuccessfully: boolean) => {
     // Refetch leads to get updated data
-    await refetchLeads();
+    const { data: freshLeads } = await refetchLeads();
     
-    if (!leads || leads.length === 0) {
+    if (!freshLeads || freshLeads.length === 0) {
       console.log('🔄 handleNextLead: No leads available, returning to dashboard');
       setActiveViewWithLogging('dashboard');
       setSelectedLead(null);
       return;
     }
 
-    // Find current lead index
-    const currentIndex = leads.findIndex(l => l.id === selectedLead?.id);
+    // Find current lead index in fresh data
+    const currentIndex = freshLeads.findIndex(l => l.id === selectedLead?.id);
     
     // Look for next lead starting from current position
     let nextLead = null;
-    for (let i = currentIndex + 1; i < leads.length; i++) {
-      if (!['converted', 'closed', 'do_not_call'].includes(leads[i].status)) {
-        nextLead = leads[i];
+    for (let i = currentIndex + 1; i < freshLeads.length; i++) {
+      if (!['converted', 'closed', 'do_not_call'].includes(freshLeads[i].status)) {
+        nextLead = freshLeads[i];
         break;
       }
     }
@@ -189,8 +189,8 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
     // If no next lead found, loop back to beginning
     if (!nextLead) {
       for (let i = 0; i < currentIndex; i++) {
-        if (!['converted', 'closed', 'do_not_call'].includes(leads[i].status)) {
-          nextLead = leads[i];
+        if (!['converted', 'closed', 'do_not_call'].includes(freshLeads[i].status)) {
+          nextLead = freshLeads[i];
           break;
         }
       }
