@@ -75,37 +75,61 @@ Deno.serve(async (req) => {
     let totalScanned = 0
     let scanResults = []
 
-    // Scan wallets by commercial with proper rate limiting
+    // Scan wallets by commercial with proper rate limiting and batching
+    const batchSize = 8
+    const innerDelayMs = 1200
+
     for (const [commercialId, addresses] of scanByCommercial.entries()) {
       try {
         console.log(`Scanning ${addresses.length} addresses for commercial ${commercialId}`)
-        
-        // Call the scan-wallet-transactions function
-        const { data: scanResult, error: scanError } = await supabase.functions.invoke('scan-wallet-transactions', {
-          body: {
-            wallet_addresses: addresses,
-            commercial_id: commercialId,
-            networks: ['ETH', 'BSC', 'BTC']
-          }
-        })
 
-        if (scanError) {
-          console.error(`Scan error for commercial ${commercialId}:`, scanError)
-          scanResults.push({
-            commercial_id: commercialId,
-            addresses_count: addresses.length,
-            success: false,
-            error: scanError.message
+        // Create batches per commercial
+        const batches: string[][] = []
+        for (let i = 0; i < addresses.length; i += batchSize) {
+          batches.push(addresses.slice(i, i + batchSize))
+        }
+        console.log(`🧩 Commercial ${commercialId}: ${batches.length} batches (size ${batchSize})`)
+
+        let scannedForCommercial = 0
+        for (let i = 0; i < batches.length; i++) {
+          const batch = batches[i]
+          console.log(`🚀 Commercial ${commercialId}: scanning batch ${i + 1}/${batches.length} with ${batch.length} addresses`)
+
+          const { data: scanResult, error: scanError } = await supabase.functions.invoke('scan-wallet-transactions', {
+            body: {
+              wallet_addresses: batch,
+              commercial_id: commercialId,
+              networks: ['ETH', 'BSC', 'BTC'],
+              monitoring_mode: true,
+              full_rescan: false,
+            }
           })
-        } else {
-          console.log(`Scan completed for commercial ${commercialId}:`, scanResult)
-          scanResults.push({
-            commercial_id: commercialId,
-            addresses_count: addresses.length,
-            success: true,
-            result: scanResult
-          })
-          totalScanned += addresses.length
+
+          if (scanError) {
+            console.error(`Scan error for commercial ${commercialId} (batch ${i + 1}):`, scanError)
+            scanResults.push({
+              commercial_id: commercialId,
+              batch_index: i + 1,
+              addresses_count: batch.length,
+              success: false,
+              error: scanError.message
+            })
+          } else {
+            console.log(`✅ Commercial ${commercialId}: finished batch ${i + 1}/${batches.length}`)
+            scanResults.push({
+              commercial_id: commercialId,
+              batch_index: i + 1,
+              addresses_count: batch.length,
+              success: true,
+              result: scanResult
+            })
+            scannedForCommercial += batch.length
+            totalScanned += batch.length
+          }
+
+          if (i < batches.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, innerDelayMs))
+          }
         }
 
         // Enhanced rate limiting - wait 2-3 seconds between commercial scans

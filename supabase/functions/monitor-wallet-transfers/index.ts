@@ -97,53 +97,82 @@ Deno.serve(async (req) => {
 
     console.log(`🔍 Scanning ${addressesToScan.length} addresses for transactions`)
 
-    // Call scan-wallet-transactions function with full_rescan to bypass cooldown for monitoring
-    const { data: scanResult, error: scanError } = await supabase.functions.invoke('scan-wallet-transactions', {
-      body: {
-        wallet_addresses: addressesToScan,
-        networks: ['ETH', 'BSC', 'BTC'],
-        full_rescan: true, // Bypass cooldown for monitoring
-        monitoring_mode: true // Flag to identify this is automatic monitoring
-      }
-    })
+    // Process addresses in small batches to avoid timeouts and rate limits
+    const batchSize = 8
+    const delayMs = 1500 // small delay between batches to respect API limits
+    const batches: string[][] = []
+    for (let i = 0; i < addressesToScan.length; i += batchSize) {
+      batches.push(addressesToScan.slice(i, i + batchSize))
+    }
 
-    if (scanError) {
-      console.error('❌ Error scanning wallets:', scanError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to scan wallet transactions' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    console.log(`🧩 Created ${batches.length} batches (size ${batchSize}) for scanning`)
+
+    // Helper sleep
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms))
+
+    // Background task to scan batches and then evaluate transfers
+    async function processBatches() {
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i]
+        console.log(`🚀 Scanning batch ${i + 1}/${batches.length} with ${batch.length} addresses`)
+        const { error: scanError } = await supabase.functions.invoke('scan-wallet-transactions', {
+          body: {
+            wallet_addresses: batch,
+            networks: ['ETH', 'BSC', 'BTC'],
+            // Do not bypass cooldown; monitoring_mode reduces cooldown to 2min
+            full_rescan: false,
+            monitoring_mode: true,
+          }
+        })
+
+        if (scanError) {
+          console.error(`❌ Error scanning batch ${i + 1}:`, scanError)
+        } else {
+          console.log(`✅ Finished batch ${i + 1}/${batches.length}`)
         }
-      )
-    }
 
-    console.log('✅ Wallet scanning completed successfully')
-
-    // Check for new transactions that might warrant transfer approval
-    const { data: recentTransactions, error: txError } = await supabase
-      .from('wallet_transactions')
-      .select('*')
-      .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()) // Last 5 minutes
-      .order('created_at', { ascending: false })
-
-    if (txError) {
-      console.error('❌ Error fetching recent transactions:', txError)
-    } else if (recentTransactions && recentTransactions.length > 0) {
-      console.log(`📈 Found ${recentTransactions.length} recent transactions`)
-      
-      // Check each transaction for transfer eligibility
-      for (const tx of recentTransactions) {
-        await checkForTransferEligibility(supabase, tx, telegramBotToken)
+        // Short delay between batches
+        if (i < batches.length - 1) {
+          await sleep(delayMs)
+        }
       }
+
+      // After scanning, check for new transactions that might warrant transfer approval
+      const { data: recentTransactions, error: txError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()) // Last 5 minutes
+        .order('created_at', { ascending: false })
+
+      if (txError) {
+        console.error('❌ Error fetching recent transactions:', txError)
+        return
+      }
+
+      if (recentTransactions && recentTransactions.length > 0) {
+        console.log(`📈 Found ${recentTransactions.length} recent transactions`)
+        for (const tx of recentTransactions) {
+          await checkForTransferEligibility(supabase, tx, telegramBotToken)
+        }
+      } else {
+        console.log('ℹ️ No recent transactions found after scan')
+      }
+
+      console.log('🏁 Monitoring cycle completed')
     }
+
+    // Run scanning in the background to avoid function timeouts
+    // The runtime will keep the function alive until the promise resolves
+    ;(globalThis as any).EdgeRuntime?.waitUntil?.(processBatches()) ?? processBatches()
 
     return new Response(
       JSON.stringify({ 
         success: true,
+        message: 'Monitoring scan scheduled in background',
         wallets_monitored: usedWallets.length,
         addresses_scanned: addressesToScan.length,
-        scan_result: scanResult
+        batches: batches.length,
+        batch_size: batchSize
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
