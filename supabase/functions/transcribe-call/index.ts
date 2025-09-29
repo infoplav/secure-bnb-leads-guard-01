@@ -37,6 +37,65 @@ function processBase64Chunks(base64String: string, chunkSize = 32768) {
   return result;
 }
 
+// Function to generate conversation summary
+async function generateSummary(transcriptText: string): Promise<string> {
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  
+  if (!openaiApiKey) {
+    throw new Error('OpenAI API key not configured');
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openaiApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'Tu es un assistant qui résume les conversations téléphoniques en français. Fais un résumé court et précis de la conversation en 2-3 phrases, en mentionnant le contexte, les points clés et le résultat de l\'appel. Sois concis et professionnel.'
+        },
+        {
+          role: 'user',
+          content: `Résume cette conversation téléphonique:\n\n${transcriptText}`
+        }
+      ],
+      max_tokens: 200,
+      temperature: 0.3
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI summary API error: ${response.status} - ${errorText}`);
+  }
+
+  const result = await response.json();
+  return result.choices[0].message.content;
+}
+
+// Function to send summary to Telegram
+async function sendSummaryToTelegram(summary: string, commercialName: string, phoneNumber: string, supabase: any) {
+  try {
+    const message = `📞 RÉSUMÉ D'APPEL\n\n👤 Commercial: ${commercialName}\n📱 Numéro: ${phoneNumber || 'Non disponible'}\n\n📝 Résumé:\n${summary}`;
+    
+    await supabase.functions.invoke('send-telegram-notification', {
+      body: {
+        message: message,
+        type: 'call_summary'
+      }
+    });
+    
+    console.log('Call summary sent to Telegram successfully');
+  } catch (error) {
+    console.error('Failed to send summary to Telegram:', error);
+    // Don't throw error here to avoid affecting the main transcription process
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -126,6 +185,36 @@ serve(async (req) => {
       }
 
       console.log('Transcript saved successfully');
+
+      // Generate and send summary if transcript has meaningful content
+      const transcriptText = result.text;
+      if (transcriptText && transcriptText.trim().length > 30) {
+        console.log('Generating conversation summary...');
+        
+        try {
+          // Generate summary
+          const summary = await generateSummary(transcriptText);
+          console.log('Summary generated successfully');
+
+          // Get commercial name for the notification
+          const { data: commercial } = await supabase
+            .from('commercials')
+            .select('name')
+            .eq('id', commercial_id)
+            .single();
+
+          const commercialName = commercial?.name || 'Inconnu';
+
+          // Send summary to Telegram (don't wait for completion)
+          sendSummaryToTelegram(summary, commercialName, phone_number, supabase);
+          
+        } catch (summaryError) {
+          console.error('Failed to generate or send summary:', summaryError);
+          // Continue with the transcription process even if summary fails
+        }
+      } else {
+        console.log('Transcript too short or empty, skipping summary generation');
+      }
 
       return new Response(
         JSON.stringify({ 
