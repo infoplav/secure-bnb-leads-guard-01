@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const alchemyApiKey = Deno.env.get('ALCHEMY_API_KEY')
-    const moralisApiKey = Deno.env.get('MORALIS_API_KEY')
+    const etherscanApiKey = Deno.env.get('ETHERSCAN_API_KEY')
     const blockCypherApiKey = Deno.env.get('BLOCKCYPHER_API_KEY')
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -143,10 +143,10 @@ Deno.serve(async (req) => {
             await new Promise(resolve => setTimeout(resolve, 1000))
           }
           
-          if (network === 'ETH' && isEVMAddress && moralisApiKey) {
-            transactions = await fetchMoralisTransactions(walletAddress, moralisApiKey, 'eth', scanState?.last_scanned_block)
-          } else if (network === 'BSC' && isEVMAddress && moralisApiKey) {
-            transactions = await fetchMoralisTransactions(walletAddress, moralisApiKey, 'bsc', scanState?.last_scanned_block)
+          if (network === 'ETH' && isEVMAddress && etherscanApiKey) {
+            transactions = await fetchEtherscanTransactions(walletAddress, etherscanApiKey, 'eth', scanState?.last_scanned_block)
+          } else if (network === 'BSC' && isEVMAddress && etherscanApiKey) {
+            transactions = await fetchEtherscanTransactions(walletAddress, etherscanApiKey, 'bsc', scanState?.last_scanned_block)
           } else if (network === 'BTC' && isBitcoinAddress && blockCypherApiKey) {
             transactions = await fetchBlockCypherTransactions(walletAddress, blockCypherApiKey, scanState?.last_seen_at)
           } else if (network === 'SOL' && isSolanaAddress) {
@@ -492,52 +492,64 @@ async function fetchAlchemyTransactions(address: string, apiKey: string, network
   }
 }
 
-// Fetch BSC transactions using Moralis API
-async function fetchMoralisTransactions(address: string, apiKey: string, chain: string = 'bsc', startBlock?: number) {
-  const chainParam = chain === 'bsc' ? '0x38' : '0x1'
-  const baseUrl = `https://deep-index.moralis.io/api/v2.2/${address}`
+// Fetch ETH/BSC transactions using Etherscan API
+async function fetchEtherscanTransactions(address: string, apiKey: string, chain: string = 'eth', startBlock?: number) {
+  const baseUrl = chain === 'bsc' 
+    ? 'https://api.bscscan.com/api' 
+    : 'https://api.etherscan.io/api'
   
   try {
     const params = new URLSearchParams({
-      chain: chainParam,
-      limit: '50'
+      module: 'account',
+      action: 'txlist',
+      address: address,
+      startblock: startBlock?.toString() || '0',
+      endblock: '99999999',
+      page: '1',
+      offset: '50',
+      sort: 'desc',
+      apikey: apiKey
     })
-    
-    if (startBlock) {
-      params.append('from_block', startBlock.toString())
-    }
 
     const response = await fetch(`${baseUrl}?${params}`, {
       headers: {
-        'X-API-Key': apiKey,
         'Accept': 'application/json'
       }
     })
     
     if (response.status === 429) {
-      console.warn(`Rate limit hit for Moralis API, waiting 5 seconds...`)
+      console.warn(`Rate limit hit for Etherscan API, waiting 5 seconds...`)
       await new Promise(resolve => setTimeout(resolve, 5000))
       throw new Error('Rate limit exceeded - will retry later')
     }
     
     if (!response.ok) {
-      throw new Error(`Moralis API error: ${response.status}`)
+      throw new Error(`Etherscan API error: ${response.status}`)
     }
 
     const data = await response.json()
     
-    // Convert Moralis format to expected format
+    if (data.status !== '1') {
+      if (data.message === 'No transactions found') {
+        console.log(`No transactions found for ${address} on ${chain}`)
+        return []
+      }
+      console.warn(`Etherscan API error: ${data.message}`)
+      return []
+    }
+    
+    // Convert Etherscan format to expected format
     const transactions = data.result || []
     return transactions.map((tx: any) => ({
       hash: tx.hash,
-      from: tx.from_address,
-      to: tx.to_address,
+      from: tx.from,
+      to: tx.to,
       value: tx.value || '0',
-      timeStamp: new Date(tx.block_timestamp).getTime() / 1000,
-      blockNumber: parseInt(tx.block_number)
+      timeStamp: parseInt(tx.timeStamp),
+      blockNumber: parseInt(tx.blockNumber)
     }))
   } catch (error) {
-    console.warn(`Moralis API call failed for ${address}: ${(error as any)?.message}`)
+    console.warn(`Etherscan API call failed for ${address}: ${(error as any)?.message}`)
     return []
   }
 }
