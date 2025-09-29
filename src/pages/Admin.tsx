@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Edit, Trash2, Plus, Users, TrendingUp, DollarSign, Target, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import EmailDomainDiagnostics from '@/components/Admin/EmailDomainDiagnostics';
+import CallTranscripts from '@/components/Admin/CallTranscripts';
 
 const Admin = () => {
   const [editingCommercial, setEditingCommercial] = useState<any>(null);
@@ -227,6 +228,13 @@ const Admin = () => {
           <p className="text-muted-foreground">Gestion des commerciaux et suivi des performances</p>
         </div>
         <div className="flex gap-3">
+          <Link to="/transcripts">
+            <Button 
+              variant="outline"
+            >
+              📞 Transcripts
+            </Button>
+          </Link>
           <Link to="/email-sending">
             <Button 
               variant="outline"
@@ -327,6 +335,7 @@ const Admin = () => {
           <TabsTrigger value="performance">Performances</TabsTrigger>
           <TabsTrigger value="leads">Leads Marketing</TabsTrigger>
           <TabsTrigger value="balances">Soldes Utilisateurs</TabsTrigger>
+          <TabsTrigger value="transcripts">Transcripts</TabsTrigger>
           <TabsTrigger value="email-domains">Domaines Email</TabsTrigger>
         </TabsList>
 
@@ -528,6 +537,20 @@ const Admin = () => {
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="transcripts">
+          <Card>
+            <CardHeader>
+              <CardTitle>Transcriptions d'Appels</CardTitle>
+              <CardDescription>
+                Consultez toutes les transcriptions d'appels avec leurs résumés
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CallTranscripts />
             </CardContent>
           </Card>
         </TabsContent>

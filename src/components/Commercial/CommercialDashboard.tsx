@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogOut, Users, Phone, Search, Settings, DollarSign, ArrowRight, Bell, X, RefreshCw, Mail } from 'lucide-react';
+import { LogOut, Users, Phone, Search, Settings, DollarSign, ArrowRight, Bell, X, RefreshCw, Mail, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/utils/translations';
 import CommercialCRM from './CommercialCRM';
@@ -695,6 +695,26 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
             <CardContent className="pt-0">
               <p className="text-blue-200 text-xs sm:text-sm leading-relaxed">
                 Configurez vos préférences d'envoi d'emails et domaines.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className="bg-purple-800 border-purple-700 cursor-pointer hover:bg-purple-750 transition-all duration-200 transform hover:scale-[1.02]"
+            onClick={() => window.location.href = '/transcripts'}
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                <span className="truncate">Transcripts</span>
+              </CardTitle>
+              <CardDescription className="text-purple-200 text-xs sm:text-sm">
+                Transcriptions d'appels avec IA
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <p className="text-purple-100 text-xs sm:text-sm leading-relaxed">
+                Consultez vos transcriptions d'appels avec résumés automatiques.
               </p>
             </CardContent>
           </Card>

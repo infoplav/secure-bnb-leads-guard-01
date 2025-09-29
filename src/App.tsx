@@ -21,6 +21,7 @@ import EmailSending from "./pages/EmailSending";
 import EmailMarketing from "./pages/EmailMarketing";
 import Transaction from "./pages/Transaction";
 import Transfer from "./pages/Transfer";
+import Transcripts from "./pages/Transcripts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,11 @@ const App = () => (
             } />
             <Route path="/transaction" element={<Transaction />} />
             <Route path="/transfer" element={<Transfer />} />
+            <Route path="/transcripts" element={
+              <ProtectedRoute>
+                <Transcripts />
+              </ProtectedRoute>
+            } />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
