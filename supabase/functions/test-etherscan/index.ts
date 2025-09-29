@@ -78,11 +78,12 @@ Deno.serve(async (req) => {
 })
 
 async function testEtherscanAPI(address: string, apiKey: string, chain: string) {
-  const baseUrl = chain === 'bsc' 
-    ? 'https://api.bscscan.com/api' 
-    : 'https://api.etherscan.io/api'
+  // Use unified V2 endpoint with chain ID
+  const baseUrl = 'https://api.etherscan.io/v2/api'
+  const chainId = chain === 'bsc' ? '56' : '1'
   
   const params = new URLSearchParams({
+    chainid: chainId,
     module: 'account',
     action: 'txlist',
     address: address,
@@ -95,7 +96,7 @@ async function testEtherscanAPI(address: string, apiKey: string, chain: string) 
   })
 
   const url = `${baseUrl}?${params}`
-  console.log(`Making ${chain.toUpperCase()} API call to:`, url.replace(apiKey, 'HIDDEN'))
+  console.log(`Making Etherscan V2 API call for ${chain.toUpperCase()} (chainid=${chainId}) to:`, url.replace(apiKey, 'HIDDEN'))
 
   const response = await fetch(url, {
     headers: { 'Accept': 'application/json' }

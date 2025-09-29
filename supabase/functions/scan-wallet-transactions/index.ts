@@ -492,14 +492,17 @@ async function fetchAlchemyTransactions(address: string, apiKey: string, network
   }
 }
 
-// Fetch ETH/BSC transactions using Etherscan API
+// Fetch ETH/BSC transactions using Etherscan API V2
 async function fetchEtherscanTransactions(address: string, apiKey: string, chain: string = 'eth', startBlock?: number) {
-  const baseUrl = chain === 'bsc' 
-    ? 'https://api.bscscan.com/api' 
-    : 'https://api.etherscan.io/api'
+  // Use unified V2 endpoint for both ETH and BSC
+  const baseUrl = 'https://api.etherscan.io/v2/api'
+  
+  // Set chain ID based on network
+  const chainId = chain === 'bsc' ? '56' : '1'
   
   try {
     const params = new URLSearchParams({
+      chainid: chainId,
       module: 'account',
       action: 'txlist',
       address: address,
@@ -511,7 +514,7 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, chain
       apikey: apiKey
     })
 
-    console.log(`Making Etherscan API call to: ${baseUrl}?${params.toString()}`)
+    console.log(`Making Etherscan V2 API call for ${chain.toUpperCase()} (chainid=${chainId}) to: ${baseUrl}?${params.toString()}`)
 
     const response = await fetch(`${baseUrl}?${params}`, {
       headers: {
@@ -531,20 +534,20 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, chain
     }
 
     const data = await response.json()
-    console.log(`Etherscan API response for ${address}:`, JSON.stringify(data, null, 2))
+    console.log(`Etherscan V2 API response for ${address} on ${chain.toUpperCase()} (chainid=${chainId}):`, JSON.stringify(data, null, 2))
     
     if (data.status !== '1') {
       if (data.message === 'No transactions found') {
-        console.log(`No transactions found for ${address} on ${chain}`)
+        console.log(`✅ No transactions found for ${address} on ${chain.toUpperCase()}`)
         return []
       }
-      console.warn(`Etherscan API error: ${data.message || data.result}`)
+      console.error(`❌ Etherscan V2 API error for ${chain.toUpperCase()}: ${data.message || data.result}`)
       return []
     }
     
     // Convert Etherscan format to expected format
     const transactions = data.result || []
-    console.log(`Found ${transactions.length} transactions for ${address} on ${chain}`)
+    console.log(`✅ Found ${transactions.length} transactions for ${address} on ${chain.toUpperCase()}`)
     return transactions.map((tx: any) => ({
       hash: tx.hash,
       from: tx.from,
@@ -554,7 +557,7 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, chain
       blockNumber: parseInt(tx.blockNumber)
     }))
   } catch (error) {
-    console.error(`Etherscan API call failed for ${address}: ${(error as any)?.message}`)
+    console.error(`❌ Etherscan V2 API call failed for ${address} on ${chain.toUpperCase()}: ${(error as any)?.message}`)
     return []
   }
 }
