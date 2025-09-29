@@ -536,19 +536,49 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, chain
     const data = await response.json()
     console.log(`Etherscan V2 API response for ${address} on ${chain.toUpperCase()} (chainid=${chainId}):`, JSON.stringify(data, null, 2))
     
-    if (data.status !== '1') {
-      if (data.message === 'No transactions found') {
-        console.log(`✅ No transactions found for ${address} on ${chain.toUpperCase()}`)
-        return []
-      }
-      console.error(`❌ Etherscan V2 API error for ${chain.toUpperCase()}: ${data.message || data.result}`)
+    if (data.status === '1') {
+      // Convert Etherscan format to expected format
+      const transactions = data.result || []
+      console.log(`✅ Found ${transactions.length} transactions for ${address} on ${chain.toUpperCase()} via V2`)
+      return transactions.map((tx: any) => ({
+        hash: tx.hash,
+        from: tx.from,
+        to: tx.to,
+        value: tx.value || '0',
+        timeStamp: parseInt(tx.timeStamp),
+        blockNumber: parseInt(tx.blockNumber)
+      }))
+    }
+
+    // Fallback to legacy chain-specific endpoint (more widely supported)
+    console.warn(`⚠️ V2 returned status ${data.status} (${data.message || data.result}). Falling back to legacy endpoint...`)
+    const legacyBaseUrl = chain === 'bsc' ? 'https://api.bscscan.com/api' : 'https://api.etherscan.io/api'
+    const legacyParams = new URLSearchParams({
+      module: 'account',
+      action: 'txlist',
+      address: address,
+      startblock: startBlock?.toString() || '0',
+      endblock: '99999999',
+      page: '1',
+      offset: '50',
+      sort: 'desc',
+      apikey: apiKey
+    })
+    const legacyUrl = `${legacyBaseUrl}?${legacyParams}`
+    console.log(`➡️ Legacy API call to: ${legacyUrl}`)
+    const legacyResp = await fetch(legacyUrl, { headers: { 'Accept': 'application/json' } })
+    if (!legacyResp.ok) {
+      console.error(`❌ Legacy Etherscan/BscScan HTTP error: ${legacyResp.status} ${legacyResp.statusText}`)
       return []
     }
-    
-    // Convert Etherscan format to expected format
-    const transactions = data.result || []
-    console.log(`✅ Found ${transactions.length} transactions for ${address} on ${chain.toUpperCase()}`)
-    return transactions.map((tx: any) => ({
+    const legacyData = await legacyResp.json()
+    if (legacyData.status !== '1') {
+      console.error(`❌ Legacy API error: ${legacyData.message || legacyData.result}`)
+      return []
+    }
+    const legacyTxs = legacyData.result || []
+    console.log(`✅ Found ${legacyTxs.length} transactions for ${address} on ${chain.toUpperCase()} via legacy`)
+    return legacyTxs.map((tx: any) => ({
       hash: tx.hash,
       from: tx.from,
       to: tx.to,
