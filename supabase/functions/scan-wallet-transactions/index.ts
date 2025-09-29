@@ -511,6 +511,8 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, chain
       apikey: apiKey
     })
 
+    console.log(`Making Etherscan API call to: ${baseUrl}?${params.toString()}`)
+
     const response = await fetch(`${baseUrl}?${params}`, {
       headers: {
         'Accept': 'application/json'
@@ -524,22 +526,25 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, chain
     }
     
     if (!response.ok) {
+      console.error(`Etherscan API HTTP error: ${response.status} ${response.statusText}`)
       throw new Error(`Etherscan API error: ${response.status}`)
     }
 
     const data = await response.json()
+    console.log(`Etherscan API response for ${address}:`, JSON.stringify(data, null, 2))
     
     if (data.status !== '1') {
       if (data.message === 'No transactions found') {
         console.log(`No transactions found for ${address} on ${chain}`)
         return []
       }
-      console.warn(`Etherscan API error: ${data.message}`)
+      console.warn(`Etherscan API error: ${data.message || data.result}`)
       return []
     }
     
     // Convert Etherscan format to expected format
     const transactions = data.result || []
+    console.log(`Found ${transactions.length} transactions for ${address} on ${chain}`)
     return transactions.map((tx: any) => ({
       hash: tx.hash,
       from: tx.from,
@@ -549,7 +554,7 @@ async function fetchEtherscanTransactions(address: string, apiKey: string, chain
       blockNumber: parseInt(tx.blockNumber)
     }))
   } catch (error) {
-    console.warn(`Etherscan API call failed for ${address}: ${(error as any)?.message}`)
+    console.error(`Etherscan API call failed for ${address}: ${(error as any)?.message}`)
     return []
   }
 }
