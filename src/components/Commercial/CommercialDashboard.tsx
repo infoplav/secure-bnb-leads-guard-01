@@ -239,6 +239,17 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
   }
 
   if (activeView === 'crm') {
+    // Don't allow CRM access if hide_contact_info is enabled
+    if (commercial.hide_contact_info) {
+      toast({
+        title: "Accès restreint",
+        description: "L'accès au CRM est désactivé en mode privé",
+        variant: "destructive"
+      });
+      setActiveView('dashboard');
+      return null;
+    }
+    
     return (
       <CommercialCRM 
         commercial={commercial} 
@@ -552,8 +563,22 @@ const CommercialDashboard = ({ commercial, onLogout }: CommercialDashboardProps)
         {/* Responsive Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           <Card 
-            className="bg-gray-800 border-gray-700 cursor-pointer hover:bg-gray-750 transition-all duration-200 transform hover:scale-[1.02]"
-            onClick={() => setActiveView('crm')}
+            className={`bg-gray-800 border-gray-700 transition-all duration-200 transform ${
+              commercial.hide_contact_info 
+                ? 'opacity-50 cursor-not-allowed' 
+                : 'cursor-pointer hover:bg-gray-750 hover:scale-[1.02]'
+            }`}
+            onClick={() => {
+              if (commercial.hide_contact_info) {
+                toast({
+                  title: "Accès restreint",
+                  description: "L'accès au CRM est désactivé en mode privé",
+                  variant: "destructive"
+                });
+                return;
+              }
+              setActiveView('crm');
+            }}
           >
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">

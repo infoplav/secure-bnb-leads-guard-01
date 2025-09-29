@@ -147,7 +147,8 @@ const CallScript = ({ lead, commercial, onBack, onLogout, onNextLead, userLead, 
       // Use the database template content and replace variables
       const processedTemplate = replaceVariables(template.content, template.subject) as { content: string; subject: string };
 
-      const { data, error } = await supabase.functions.invoke('send-marketing-email', {
+      // Send email in background without awaiting to avoid call interruption
+      supabase.functions.invoke('send-marketing-email', {
         body: {
           to: leadEmail,
           subject: processedTemplate.subject,
@@ -161,18 +162,49 @@ const CallScript = ({ lead, commercial, onBack, onLogout, onNextLead, userLead, 
           // Use domain preference for step determination
           domain: commercial.email_domain_preference || 'domain1',
         }
+      }).then(({ data, error }) => {
+        if (error) {
+          console.error('Error sending email:', error);
+          setEmailStatuses(prev => ({ ...prev, [stepKey]: 'error' }));
+          toast({
+            title: t('callScript.emailError'),
+            description: t('callScript.emailErrorMessage'),
+            variant: "destructive"
+          });
+          return;
+        }
+        
+        if (!data.success) {
+          console.error('Email send failed:', data.error || data.details);
+          setEmailStatuses(prev => ({ ...prev, [stepKey]: 'error' }));
+          toast({
+            title: t('callScript.emailError'),
+            description: data.error || data.details || 'Failed to send email',
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setEmailStatuses(prev => ({ ...prev, [stepKey]: 'sent' }));
+        toast({
+          title: t('callScript.emailSent'),
+          description: `Email envoyé à ${leadEmail}`
+        });
+      }).catch((error) => {
+        console.error('Error sending email:', error);
+        setEmailStatuses(prev => ({ ...prev, [stepKey]: 'error' }));
+        toast({
+          title: t('callScript.emailError'),
+          description: t('callScript.emailErrorMessage'),
+          variant: "destructive"
+        });
       });
 
-      if (error) throw error;
-      
-      if (!data.success) {
-        throw new Error(data.error || data.details || 'Failed to send email');
-      }
-
+      // Immediately set to sent status to avoid blocking the UI
       setEmailStatuses(prev => ({ ...prev, [stepKey]: 'sent' }));
       toast({
-        title: t('callScript.emailSent'),
-        description: `Email envoyé à ${leadEmail}`
+        title: "Email en cours d'envoi",
+        description: `Email envoyé en arrière-plan à ${leadEmail}`
       });
     } catch (error) {
       console.error('Error sending email:', error);
