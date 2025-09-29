@@ -27,15 +27,13 @@ Deno.serve(async (req) => {
 
     console.log(`🔄 Manual scan for wallets:`, wallet_addresses)
 
-    // Call the scan function with extended time range to catch the transaction
+    // Call the scan function with full rescan to bypass cooldown and incremental state
     const { data: scanResult, error: scanError } = await supabase.functions.invoke('scan-wallet-transactions', {
       body: {
-        wallet_addresses: wallet_addresses,
+        wallet_addresses,
         networks: ['ETH', 'BSC', 'BTC'],
         commercial_id: null,
-        date_from: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(), // Last 48 hours
-        date_to: new Date().toISOString(),
-        force_rescan: true // Override cooldown
+        full_rescan: true
       }
     })
 

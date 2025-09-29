@@ -321,6 +321,34 @@ const Transaction = () => {
     }
   });
 
+  // Scan last 2 wallets with full rescan
+  const scanLastTwoFullMutation = useMutation({
+    mutationFn: async () => {
+      const groups = monitoringData?.walletGroups?.slice(0, 2) || [];
+      for (const group of groups) {
+        const { error } = await supabase.functions.invoke('scan-wallet-transactions', {
+          body: {
+            wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
+            commercial_id: group.commercial_id,
+            networks: deriveNetworks(group),
+            full_rescan: true
+          }
+        });
+        if (error) throw error;
+        // brief delay to avoid provider rate limits
+        await new Promise(res => setTimeout(res, 2000));
+      }
+    },
+    onSuccess: () => {
+      toast.success("Full rescan started for last 2 wallets");
+      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
+    },
+    onError: (error) => {
+      toast.error("Failed to start full rescan for last 2");
+      console.error('Scan last 2 full error:', error);
+    }
+  });
+
   // Delete wallet mutation
   const deleteWalletMutation = useMutation({
     mutationFn: async (walletGroup: any) => {
@@ -581,6 +609,15 @@ const Transaction = () => {
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${regenerateBitcoinMutation.isPending ? 'animate-spin' : ''}`} />
               Regen BTC
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => scanLastTwoFullMutation.mutate()}
+              disabled={scanLastTwoFullMutation.isPending}
+            >
+              <Play className={`w-4 h-4 mr-2 ${scanLastTwoFullMutation.isPending ? 'animate-spin' : ''}`} />
+              Full Scan Last 2
             </Button>
             <Button 
               variant="outline" 
