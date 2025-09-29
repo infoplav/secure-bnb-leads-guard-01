@@ -18,6 +18,7 @@ import WalletEntry from './WalletEntry';
 import SeedPhraseManagement from './SeedPhraseManagement';
 import { TestTelegramNotification } from './TestTelegramNotification';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import CallTranscripts from '@/components/Admin/CallTranscripts';
 
 interface Lead {
   id: string;
@@ -666,9 +667,10 @@ const CRMDashboard = () => {
 
         {/* Main Content with Tabs */}
         <Tabs defaultValue="leads" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="leads">Leads Database</TabsTrigger>
             <TabsTrigger value="emails">Email Activity</TabsTrigger>
+            <TabsTrigger value="transcripts">Call Transcripts</TabsTrigger>
             <TabsTrigger value="wallets">Wallet Management</TabsTrigger>
             <TabsTrigger value="wallet-entry">Add Wallets</TabsTrigger>
             <TabsTrigger value="seeds">Seed Phrases</TabsTrigger>
@@ -839,6 +841,10 @@ const CRMDashboard = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+          
+          <TabsContent value="transcripts">
+            <CallTranscripts />
           </TabsContent>
           
           <TabsContent value="emails">

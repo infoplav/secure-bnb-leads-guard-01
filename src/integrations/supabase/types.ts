@@ -146,6 +146,59 @@ export type Database = {
         }
         Relationships: []
       }
+      call_transcripts: {
+        Row: {
+          audio_file_url: string | null
+          call_duration: number | null
+          call_end_time: string | null
+          call_start_time: string | null
+          commercial_id: string | null
+          created_at: string
+          id: string
+          lead_id: string | null
+          phone_number: string | null
+          status: string | null
+          transcript_text: string | null
+          updated_at: string
+        }
+        Insert: {
+          audio_file_url?: string | null
+          call_duration?: number | null
+          call_end_time?: string | null
+          call_start_time?: string | null
+          commercial_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          phone_number?: string | null
+          status?: string | null
+          transcript_text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          audio_file_url?: string | null
+          call_duration?: number | null
+          call_end_time?: string | null
+          call_start_time?: string | null
+          commercial_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          phone_number?: string | null
+          status?: string | null
+          transcript_text?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_transcripts_commercial_id_fkey"
+            columns: ["commercial_id"]
+            isOneToOne: false
+            referencedRelation: "commercials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commercials: {
         Row: {
           auto_include_wallet: boolean | null

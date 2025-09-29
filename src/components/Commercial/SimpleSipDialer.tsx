@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Phone, PhoneOff, Mic, MicOff, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useCommercialPrivacy } from '@/hooks/useCommercialPrivacy';
+import { AudioRecorder, transcribeAudio } from '@/utils/audioRecording';
 // @ts-ignore - JsSIP types not available
 import * as JsSIP from 'jssip';
 
@@ -28,6 +29,8 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
   const uaRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRecorderRef = useRef<AudioRecorder | null>(null);
+  const callStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Check if JsSIP is loaded
@@ -157,10 +160,42 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
   };
 
   const setupCallEvents = (session: any) => {
-    session.on('ended', () => {
+    session.on('ended', async () => {
       setCallState('ended');
       onCallStateChange?.('ended');
       sessionRef.current = null;
+      
+      // Stop recording and process transcript if call was connected
+      if (audioRecorderRef.current?.isRecording()) {
+        try {
+          const audioBlob = await audioRecorderRef.current.stop();
+          if (audioBlob && callStartTimeRef.current && commercial?.id) {
+            const callDuration = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
+            
+            console.log('Processing call transcript...');
+            const result = await transcribeAudio(
+              audioBlob,
+              commercial.id,
+              phoneNumber,
+              undefined, // lead_id if available
+              callDuration
+            );
+            
+            if (result.success) {
+              toast({
+                title: "Appel transcrit",
+                description: "La transcription de l'appel a été sauvegardée",
+              });
+            } else {
+              console.error('Transcription failed:', result.error);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing call recording:', error);
+        }
+      }
+      
+      callStartTimeRef.current = null;
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = null;
       }
@@ -171,6 +206,13 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
       setCallState('ended');
       onCallStateChange?.('ended');
       sessionRef.current = null;
+      
+      // Stop recording if it was started
+      if (audioRecorderRef.current?.isRecording()) {
+        audioRecorderRef.current.stop();
+      }
+      callStartTimeRef.current = null;
+      
       toast({
         title: "Appel échoué",
         description: `Erreur: ${e.cause}`,
@@ -178,9 +220,20 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
       });
     });
 
-    session.on('confirmed', () => {
+    session.on('confirmed', async () => {
       setCallState('connected');
       onCallStateChange?.('connected');
+      callStartTimeRef.current = Date.now();
+      
+      // Start call recording when call is connected
+      try {
+        audioRecorderRef.current = new AudioRecorder();
+        await audioRecorderRef.current.start();
+        console.log('Call recording started');
+      } catch (error) {
+        console.error('Failed to start call recording:', error);
+        // Don't show error to user, recording is optional
+      }
     });
 
     session.on('progress', () => {
@@ -256,11 +309,17 @@ const SimpleSipDialer: React.FC<SimpleSipDialerProps> = ({
     }
   };
 
-  const hangup = () => {
+  const hangup = async () => {
     if (sessionRef.current) {
       sessionRef.current.terminate();
       sessionRef.current = null;
     }
+    
+    // Stop recording if active
+    if (audioRecorderRef.current?.isRecording()) {
+      await audioRecorderRef.current.stop();
+    }
+    
     setCallState('ended');
     onCallStateChange?.('ended');
   };
