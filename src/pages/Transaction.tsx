@@ -77,6 +77,7 @@ const Transaction = () => {
       
       // Group scan states by generated_wallet_id and get the most recent last_seen_at
       const scanStateByGwId = new Map();
+      console.log('Scan states from DB:', scanStateRes.data);
       (scanStateRes.data || []).forEach((s: any) => {
         if (s.generated_wallet_id) {
           const existing = scanStateByGwId.get(s.generated_wallet_id);
@@ -85,6 +86,7 @@ const Transaction = () => {
           }
         }
       });
+      console.log('Scan states by generated_wallet_id:', scanStateByGwId);
       const contactsByCommercial = new Map();
       (contactsRes.data || []).forEach((contact: any) => {
         if (!contactsByCommercial.has(contact.commercial_id)) {
@@ -119,7 +121,15 @@ const Transaction = () => {
         const commercial = commercialsMap.get(wallet.used_by_commercial_id);
         const contact = (contactsByCommercial.get(wallet.used_by_commercial_id) || [])[0];
         const lead = (leadsByCommercial.get(wallet.used_by_commercial_id) || [])[0];
-        const lastScanTime = generatedWallet ? scanStateByGwId.get(generatedWallet.id)?.last_seen_at : null;
+        const scanState = generatedWallet ? scanStateByGwId.get(generatedWallet.id) : null;
+        const lastScanTime = scanState?.last_seen_at || null;
+        
+        console.log('Wallet processing:', {
+          wallet_id: wallet.id,
+          generated_wallet_id: generatedWallet?.id,
+          has_scan_state: !!scanState,
+          last_scan_time: lastScanTime
+        });
 
         // Use client_tracking_id directly as the recipient email
         const displayEmail = wallet.client_tracking_id || 'Unknown';
