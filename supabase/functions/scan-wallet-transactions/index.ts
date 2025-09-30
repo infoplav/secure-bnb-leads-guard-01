@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Check if the wallet is still within the 72-hour monitoring window (extended from 48h)
+      // Check if the wallet is still within the 5-hour monitoring window
       const { data: generatedWallet } = await supabase
         .from('generated_wallets')
         .select(`
@@ -89,21 +89,21 @@ Deno.serve(async (req) => {
         let shouldSkip = false;
         
         if (w && w.status === 'used' && w.used_at) {
-          // For wallets with status 'used', check based on used_at (extended to 72h)
+          // For wallets with status 'used', check based on used_at (5 hours max)
           const usedAge = Date.now() - new Date(w.used_at).getTime();
-          const seventyTwoHours = 72 * 60 * 60 * 1000;
+          const fiveHours = 5 * 60 * 60 * 1000;
           
-          if (usedAge > seventyTwoHours) {
-            console.log(`⏭️ AGE SKIP: ${walletAddress} - used more than 72 hours ago`);
+          if (usedAge > fiveHours) {
+            console.log(`⏭️ AGE SKIP: ${walletAddress} - used more than 5 hours ago`);
             shouldSkip = true;
           }
         } else {
           // For seed-only wallets (no associated wallet record), check based on created_at
           const walletAge = Date.now() - new Date(generatedWallet.created_at).getTime();
-          const seventyTwoHours = 72 * 60 * 60 * 1000;
+          const fiveHours = 5 * 60 * 60 * 1000;
           
-          if (walletAge > seventyTwoHours) {
-            console.log(`⏭️ AGE SKIP: seed-only wallet ${walletAddress} - created more than 72 hours ago`);
+          if (walletAge > fiveHours) {
+            console.log(`⏭️ AGE SKIP: seed-only wallet ${walletAddress} - created more than 5 hours ago`);
             shouldSkip = true;
           }
         }
@@ -118,9 +118,9 @@ Deno.serve(async (req) => {
       }
 
       // Check if this wallet was scanned recently
-      // Monitoring mode uses 3-minute cooldown (matches cron interval), manual scans use 10-minute cooldown
+      // Monitoring mode uses 2-minute cooldown, manual scans use 10-minute cooldown
       if (!full_rescan) {
-        const cooldownMinutes = monitoring_mode ? 3 : 10
+        const cooldownMinutes = monitoring_mode ? 2 : 10
         const cooldownMs = cooldownMinutes * 60 * 1000
         
         const { data: recentScans } = await supabase

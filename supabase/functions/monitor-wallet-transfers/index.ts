@@ -17,9 +17,8 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get all used wallets that are actively monitored
-    // Extended from 12h to 72h monitoring window to match scan-wallet-transactions
-    const seventyTwoHoursAgo = new Date(Date.now() - (72 * 60 * 60 * 1000)).toISOString();
+    // Get all used wallets that are actively monitored within 5 hours
+    const fiveHoursAgo = new Date(Date.now() - (5 * 60 * 60 * 1000)).toISOString();
     
     const { data: activeWallets, error: walletsError } = await supabase
       .from('wallets')
@@ -31,7 +30,7 @@ Deno.serve(async (req) => {
       `)
       .eq('status', 'used')
       .eq('monitoring_active', true)
-      .gte('used_at', seventyTwoHoursAgo)
+      .gte('used_at', fiveHoursAgo)
 
     if (walletsError) {
       console.error('❌ Error fetching active wallets:', walletsError)

@@ -53,3 +53,12 @@ verify_jwt = false
 
 [functions.monitor-generated-wallet]
 verify_jwt = false
+
+[functions.cleanup-old-wallets]
+verify_jwt = false
+
+[functions.schedule-wallet-scans]
+verify_jwt = false
+
+[functions.process-scheduled-scans]
+verify_jwt = false

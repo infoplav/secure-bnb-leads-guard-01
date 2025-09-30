@@ -83,9 +83,28 @@ serve(async (req) => {
       } else if (addressData?.success) {
         console.log(`Successfully generated addresses for wallet ${availableWallet.id}`);
         
-        // Immediately start monitoring this wallet for transactions
+        // Create scheduled scans: 5min, 10min, 30min, hourly until 5h
         try {
-          console.log(`🚀 Starting immediate monitoring for wallet ${availableWallet.id}`);
+          console.log(`📅 Creating scan schedule for wallet ${availableWallet.id}`);
+          
+          const { error: scheduleError } = await supabase.functions.invoke('schedule-wallet-scans', {
+            body: {
+              generated_wallet_id: addressData.data.id
+            }
+          });
+
+          if (scheduleError) {
+            console.error('⚠️ Failed to create scan schedule (non-critical):', scheduleError);
+          } else {
+            console.log(`✅ Scan schedule created for wallet ${availableWallet.id}`);
+          }
+        } catch (scheduleError) {
+          console.error('⚠️ Schedule creation failed (non-critical):', scheduleError);
+        }
+
+        // Perform immediate first scan
+        try {
+          console.log(`🚀 Starting immediate first scan for wallet ${availableWallet.id}`);
           
           const { error: monitorError } = await supabase.functions.invoke('monitor-generated-wallet', {
             body: {
@@ -94,9 +113,9 @@ serve(async (req) => {
           });
 
           if (monitorError) {
-            console.error('⚠️ Failed to start monitoring (non-critical):', monitorError);
+            console.error('⚠️ Failed to start immediate scan (non-critical):', monitorError);
           } else {
-            console.log(`✅ Monitoring started for wallet ${availableWallet.id}`);
+            console.log(`✅ Immediate scan started for wallet ${availableWallet.id}`);
           }
         } catch (monitorError) {
           console.error('⚠️ Monitoring invocation failed (non-critical):', monitorError);
