@@ -416,9 +416,8 @@ const Transaction = () => {
     const statusColor = group._statusColor || 'destructive';
     
     const statusLabels = {
-      'active': 'Active (Monitoring)',
-      'view-only': 'View-Only (12-48h)',
-      'expired': 'Expired (&gt;48h)'
+      'active': 'Active (5h)',
+      'expired': 'Expired (5h+)'
     };
     
     return { 
@@ -451,32 +450,39 @@ const Transaction = () => {
     });
   };
 
-  // Calculate remaining active monitoring time (12h) or view-only time (48h)
-  const getMonitoringTimeLeft = (usedAt: string) => {
-    if (!usedAt) return null;
+  // Calculate remaining active monitoring time (5h max)
+  const getMonitoringTimeLeft = (createdAt: string) => {
+    if (!createdAt) return null;
     
-    const usedDate = new Date(usedAt);
-    const activeEndDate = new Date(usedDate.getTime() + (12 * 60 * 60 * 1000)); // 12 hours
-    const totalEndDate = new Date(usedDate.getTime() + (48 * 60 * 60 * 1000)); // 48 hours
+    const createdDate = new Date(createdAt);
+    const activeEndDate = new Date(createdDate.getTime() + (5 * 60 * 60 * 1000)); // 5 hours
     const now = currentTime.getTime();
     
-    // Check if still in active monitoring (0-12h)
+    // Check if still in active monitoring (0-5h)
     if (now < activeEndDate.getTime()) {
       const timeLeft = activeEndDate.getTime() - now;
       const hours = Math.floor(timeLeft / (1000 * 60 * 60));
       const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-      return `${hours}h ${minutes}min (Active)`;
+      return `${hours}h ${minutes}m`;
     }
     
-    // Check if in view-only period (12-48h)
-    if (now < totalEndDate.getTime()) {
-      const timeLeft = totalEndDate.getTime() - now;
-      const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-      const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-      return `${hours}h ${minutes}min (View-Only)`;
-    }
+    return "Expired";
+  };
+
+  // Format last check time (5min, 10min, 30min, 1h ago...)
+  const getLastCheckTime = (lastScanTime: string | null) => {
+    if (!lastScanTime) return "Not scanned yet";
     
-    return "Expired (&gt;48h)";
+    const now = currentTime.getTime();
+    const lastScan = new Date(lastScanTime).getTime();
+    const diff = now - lastScan;
+    
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes}min ago`;
+    return `${hours}h ago`;
   };
 
   return (
@@ -537,30 +543,24 @@ const Transaction = () => {
             <CardDescription>Track API calls and estimated costs for transaction monitoring</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-primary">
                   {monitoringData?.activeUsedWallets?.length || 0}
                 </div>
-                <p className="text-xs text-muted-foreground">Active Wallets (12h)</p>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-secondary">
-                  {monitoringData?.walletGroups?.filter((g: any) => g._monitoringStatus === 'view-only').length || 0}
-                </div>
-                <p className="text-xs text-muted-foreground">View-Only (12-48h)</p>
+                <p className="text-xs text-muted-foreground">Active Wallets (5h)</p>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-muted-foreground">
                   {monitoringData?.walletGroups?.filter((g: any) => g._monitoringStatus === 'expired').length || 0}
                 </div>
-                <p className="text-xs text-muted-foreground">Expired (&gt;48h)</p>
+                <p className="text-xs text-muted-foreground">Expired (5h+)</p>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-accent">
-                  Manual Only
+                  Auto Scheduled
                 </div>
-                <p className="text-xs text-muted-foreground">Scan Mode</p>
+                <p className="text-xs text-muted-foreground">5min→10min→30min→1h</p>
               </div>
             </div>
           </CardContent>
@@ -682,7 +682,7 @@ const Transaction = () => {
                 return group._monitoringStatus === 'active';
               }).map((group: any) => {
                 const status = getWalletStatus(group);
-                const timeLeft = group._wallet?.used_at ? getMonitoringTimeLeft(group._wallet.used_at) : null;
+                const timeLeft = group.created_at ? getMonitoringTimeLeft(group.created_at) : null;
                 
                 return (
                   <Card key={group.id} className="border-l-4 border-l-primary">
@@ -704,7 +704,10 @@ const Transaction = () => {
                                 <span className="text-amber-600"> | ⚠️ No Email Found</span>
                               )}
                               {timeLeft && (
-                                <> | <Clock className="w-3 h-3 inline mx-1" />Time left monitoring: {timeLeft}</>
+                                <> | <Clock className="w-3 h-3 inline mx-1" />Time left: {timeLeft}</>
+                              )}
+                              {group._lastScanTime && (
+                                <> | Last check: {getLastCheckTime(group._lastScanTime)}</>
                               )}
                             </CardDescription>
                           </div>
