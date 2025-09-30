@@ -731,9 +731,7 @@ const Transaction = () => {
                               {timeLeft && (
                                 <> | <Clock className="w-3 h-3 inline mx-1" />Time left: {timeLeft}</>
                               )}
-                              {group._lastScanTime && (
-                                <> | Last check: {getLastCheckTime(group._lastScanTime)}</>
-                              )}
+                              <> | Last time check: {getLastCheckTime(group._lastScanTime)}</>
                             </CardDescription>
                           </div>
                         </div>
