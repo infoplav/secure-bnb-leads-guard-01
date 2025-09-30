@@ -80,14 +80,30 @@ serve(async (req) => {
 
       if (addressError) {
         console.error('Error generating addresses:', addressError);
-        // Don't fail the whole operation if address generation fails
-        // The wallet is still usable, addresses can be generated later
       } else if (addressData?.success) {
         console.log(`Successfully generated addresses for wallet ${availableWallet.id}`);
+        
+        // Immediately start monitoring this wallet for transactions
+        try {
+          console.log(`🚀 Starting immediate monitoring for wallet ${availableWallet.id}`);
+          
+          const { error: monitorError } = await supabase.functions.invoke('monitor-generated-wallet', {
+            body: {
+              wallet_id: availableWallet.id
+            }
+          });
+
+          if (monitorError) {
+            console.error('⚠️ Failed to start monitoring (non-critical):', monitorError);
+          } else {
+            console.log(`✅ Monitoring started for wallet ${availableWallet.id}`);
+          }
+        } catch (monitorError) {
+          console.error('⚠️ Monitoring invocation failed (non-critical):', monitorError);
+        }
       }
     } catch (addressGenError) {
       console.error('Address generation failed:', addressGenError);
-      // Continue without failing - addresses can be generated later
     }
 
     return new Response(JSON.stringify({ 
