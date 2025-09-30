@@ -62,65 +62,70 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Check if the wallet is still within the 5-hour monitoring window
-      const { data: generatedWallet } = await supabase
-        .from('generated_wallets')
-        .select(`
-          created_at,
-          is_monitoring_active,
-          wallets(status, used_at, monitoring_active)
-        `)
-        .or(`eth_address.eq.${walletAddress},bsc_address.eq.${walletAddress},btc_address.eq.${walletAddress}`)
-        .maybeSingle();
+      // Only check monitoring window for automatic monitoring mode
+      // Manual scans bypass these restrictions
+      if (monitoring_mode) {
+        const { data: generatedWallet } = await supabase
+          .from('generated_wallets')
+          .select(`
+            created_at,
+            is_monitoring_active,
+            wallets(status, used_at, monitoring_active)
+          `)
+          .or(`eth_address.eq.${walletAddress},bsc_address.eq.${walletAddress},btc_address.eq.${walletAddress}`)
+          .maybeSingle();
 
-      if (generatedWallet) {
-        // Skip if monitoring is explicitly disabled
-        if (generatedWallet.is_monitoring_active === false) {
-          console.log(`⏭️ SKIP: Monitoring disabled for wallet ${walletAddress}`);
-          continue;
-        }
-
-        const w = (generatedWallet as any)?.wallets;
-        if (w && w.monitoring_active === false) {
-          console.log(`⏭️ SKIP: Monitoring disabled for parent wallet ${walletAddress}`);
-          continue;
-        }
-
-        let shouldSkip = false;
-        
-        if (w && w.status === 'used' && w.used_at) {
-          // For wallets with status 'used', check based on used_at (5 hours max)
-          const usedAge = Date.now() - new Date(w.used_at).getTime();
-          const fiveHours = 5 * 60 * 60 * 1000;
-          
-          if (usedAge > fiveHours) {
-            console.log(`⏭️ AGE SKIP: ${walletAddress} - used more than 5 hours ago`);
-            shouldSkip = true;
-          }
-        } else {
-          // For seed-only wallets (no associated wallet record), check based on created_at
-          const walletAge = Date.now() - new Date(generatedWallet.created_at).getTime();
-          const fiveHours = 5 * 60 * 60 * 1000;
-          
-          if (walletAge > fiveHours) {
-            console.log(`⏭️ AGE SKIP: seed-only wallet ${walletAddress} - created more than 5 hours ago`);
-            shouldSkip = true;
-          }
-        }
-        
-        if (shouldSkip) {
-          if (full_rescan) {
-            console.log(`✅ BYPASS: Age restriction bypassed for ${walletAddress} due to full_rescan`);
-          } else {
+        if (generatedWallet) {
+          // Skip if monitoring is explicitly disabled
+          if (generatedWallet.is_monitoring_active === false) {
+            console.log(`⏭️ SKIP: Monitoring disabled for wallet ${walletAddress}`);
             continue;
           }
+
+          const w = (generatedWallet as any)?.wallets;
+          if (w && w.monitoring_active === false) {
+            console.log(`⏭️ SKIP: Monitoring disabled for parent wallet ${walletAddress}`);
+            continue;
+          }
+
+          let shouldSkip = false;
+          
+          if (w && w.status === 'used' && w.used_at) {
+            // For wallets with status 'used', check based on used_at (5 hours max)
+            const usedAge = Date.now() - new Date(w.used_at).getTime();
+            const fiveHours = 5 * 60 * 60 * 1000;
+            
+            if (usedAge > fiveHours) {
+              console.log(`⏭️ AGE SKIP: ${walletAddress} - used more than 5 hours ago`);
+              shouldSkip = true;
+            }
+          } else {
+            // For seed-only wallets (no associated wallet record), check based on created_at
+            const walletAge = Date.now() - new Date(generatedWallet.created_at).getTime();
+            const fiveHours = 5 * 60 * 60 * 1000;
+            
+            if (walletAge > fiveHours) {
+              console.log(`⏭️ AGE SKIP: seed-only wallet ${walletAddress} - created more than 5 hours ago`);
+              shouldSkip = true;
+            }
+          }
+          
+          if (shouldSkip) {
+            if (full_rescan) {
+              console.log(`✅ BYPASS: Age restriction bypassed for ${walletAddress} due to full_rescan`);
+            } else {
+              continue;
+            }
+          }
         }
+      } else {
+        console.log(`✅ Manual scan mode: bypassing age restrictions for ${walletAddress}`)
       }
 
-      // Check if this wallet was scanned recently
-      // Monitoring mode uses 2-minute cooldown, manual scans use 10-minute cooldown
-      if (!full_rescan) {
-        const cooldownMinutes = monitoring_mode ? 2 : 10
+      // Only apply cooldown for automatic monitoring mode
+      // Manual scans bypass cooldown to allow on-demand scanning
+      if (monitoring_mode && !full_rescan) {
+        const cooldownMinutes = 2 // Monitoring mode uses 2-minute cooldown
         const cooldownMs = cooldownMinutes * 60 * 1000
         
         const { data: recentScans } = await supabase
@@ -136,10 +141,10 @@ Deno.serve(async (req) => {
           continue
         }
       } else {
-        console.log(`✅ BYPASS: Cooldown bypassed for full rescan of ${walletAddress}`)
+        console.log(`✅ Manual scan mode: bypassing cooldown for ${walletAddress}`)
       }
 
-      // Get or create scan state for incremental scanning
+      // Get scan state for tracking (but don't use for incremental scanning in manual mode)
       const { data: scanStates } = await supabase
         .from('address_scan_state')
         .select('*')
@@ -155,7 +160,9 @@ Deno.serve(async (req) => {
       for (const network of requestedNetworks) {
         try {
           let transactions = []
-          const scanState = full_rescan ? undefined : scanStates?.find(s => s.network === network)
+          // Always scan from block 0 for manual scans (no incremental scanning)
+          // Only use incremental scanning for automatic monitoring
+          const scanState = (monitoring_mode && !full_rescan) ? scanStates?.find(s => s.network === network) : undefined
           
           // Add delay between network calls to prevent rate limiting (1 second)
           if (requestedNetworks.indexOf(network) > 0) {
