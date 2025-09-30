@@ -44,8 +44,8 @@ function generateBitcoinAddress(seedPhrase: string): string {
   }
 }
 
-// Proper Ethereum address generation  
-function generateEthereumAddress(seedPhrase: string): string {
+// Proper Ethereum address generation using private key
+async function generateEthereumAddress(seedPhrase: string): Promise<string> {
   try {
     const seed = mnemonicToSeedSync(seedPhrase);
     const hdkey = HDKey.fromMasterSeed(seed);
@@ -53,15 +53,21 @@ function generateEthereumAddress(seedPhrase: string): string {
     // BIP44 derivation path for Ethereum: m/44'/60'/0'/0/0
     const derivedKey = hdkey.derive("m/44'/60'/0'/0/0");
     
-    if (!derivedKey.publicKey) {
-      throw new Error("Failed to derive Ethereum public key");
+    if (!derivedKey.privateKey) {
+      throw new Error("Failed to derive Ethereum private key");
     }
     
-    // Get uncompressed public key (remove first byte)
-    const uncompressedPubKey = derivedKey.publicKey.slice(1);
+    // Import secp256k1 for proper public key generation
+    const { getPublicKey } = await import("https://esm.sh/@noble/secp256k1@2.0.0");
+    
+    // Generate uncompressed public key from private key (64 bytes without prefix)
+    const publicKey = getPublicKey(derivedKey.privateKey, false);
+    
+    // Remove the 0x04 prefix to get the 64-byte public key
+    const publicKeyBytes = publicKey.slice(1);
     
     // Ethereum address is last 20 bytes of keccak256 hash of public key
-    const hash = keccak_256(uncompressedPubKey);
+    const hash = keccak_256(publicKeyBytes);
     const addressBytes = hash.slice(-20);
     
     // Convert to hex with 0x prefix
@@ -98,8 +104,8 @@ serve(async (req) => {
 
     console.log(`Generating addresses for wallet ${wallet_id}`);
 
-    // Generate addresses
-    const ethAddress = generateEthereumAddress(seed_phrase);
+    // Generate addresses (await the async function)
+    const ethAddress = await generateEthereumAddress(seed_phrase);
     const btcAddress = generateBitcoinAddress(seed_phrase);
     const bscAddress = ethAddress; // BSC uses same address format as Ethereum
 
