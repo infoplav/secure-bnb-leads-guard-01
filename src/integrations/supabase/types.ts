@@ -822,6 +822,50 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_scan_schedule: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          executed_at: string | null
+          generated_wallet_id: string
+          id: string
+          scan_number: number
+          scheduled_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          generated_wallet_id: string
+          id?: string
+          scan_number: number
+          scheduled_at: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          generated_wallet_id?: string
+          id?: string
+          scan_number?: number
+          scheduled_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_scan_schedule_generated_wallet_id_fkey"
+            columns: ["generated_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "generated_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_transactions: {
         Row: {
           amount: number
