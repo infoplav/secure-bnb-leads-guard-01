@@ -31,20 +31,8 @@ serve(async (req) => {
     
     console.log(`🔍 Get wallet request: commercial_id=${commercial_id}, client_email=${trackingEmail}`);
 
-    // CRITICAL: Check if this email already has a wallet assigned
-    if (trackingEmail) {
-      const { data: existingWallet, error: checkError } = await supabase
-        .from('wallets')
-        .select('id, wallet_phrase, status, used_at')
-        .eq('client_tracking_id', trackingEmail)
-        .eq('status', 'used')
-        .maybeSingle();
-
-      if (existingWallet) {
-        console.error(`❌ REUSE ATTEMPT BLOCKED: Email ${trackingEmail} already has wallet ${existingWallet.id} (used at ${existingWallet.used_at})`);
-        throw new Error(`This email already has a wallet assigned. Wallet reuse is not allowed.`);
-      }
-    }
+    // Allow fresh wallet assignment for every email send
+    console.log(`✅ Fresh wallet assignment requested for email: ${trackingEmail || 'unknown'}`);
 
     console.log(`🎯 Attempting atomic wallet assignment for commercial ${commercial_id}, client email ${trackingEmail || 'unknown'}`);
 
