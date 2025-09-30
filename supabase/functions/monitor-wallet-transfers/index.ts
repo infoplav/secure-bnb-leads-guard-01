@@ -18,6 +18,9 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Get all used wallets that are actively monitored
+    // Extended from 12h to 72h monitoring window to match scan-wallet-transactions
+    const seventyTwoHoursAgo = new Date(Date.now() - (72 * 60 * 60 * 1000)).toISOString();
+    
     const { data: activeWallets, error: walletsError } = await supabase
       .from('wallets')
       .select(`
@@ -28,6 +31,7 @@ Deno.serve(async (req) => {
       `)
       .eq('status', 'used')
       .eq('monitoring_active', true)
+      .gte('used_at', seventyTwoHoursAgo)
 
     if (walletsError) {
       console.error('❌ Error fetching active wallets:', walletsError)
@@ -95,8 +99,9 @@ Deno.serve(async (req) => {
     console.log(`🔍 Scanning ${addressesToScan.length} addresses for transactions`)
 
     // Process addresses in batches to avoid timeouts
-    const BATCH_SIZE = 8
-    const BATCH_DELAY_MS = 1500
+    // Increased batch size and reduced delay for better efficiency
+    const BATCH_SIZE = 12
+    const BATCH_DELAY_MS = 1000
     const batches: string[][] = []
     
     for (let i = 0; i < addressesToScan.length; i += BATCH_SIZE) {
