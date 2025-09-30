@@ -27,29 +27,30 @@ serve(async (req) => {
 
     // Use email as the client tracking ID for direct email tracking
     const trackingEmail = client_tracking_id;
-    console.log(`Get wallet request: commercial_id=${commercial_id}, client_email=${trackingEmail}`);
-
-    console.log(`Getting new wallet for commercial ${commercial_id}, client email ${trackingEmail || 'unknown'} - never reusing wallets`);
-
-    // Get an available wallet
-    const { data: availableWallet, error: walletError } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('status', 'available')
-      .limit(1)
-      .single();
-
-    if (walletError || !availableWallet) {
-      console.error('No available wallets found:', walletError);
-      throw new Error('No available wallets found');
-    }
-
-    // Mark wallet as used - store the actual recipient email in client_tracking_id
     const finalTrackingId = trackingEmail || `commercial_${commercial_id}_${Date.now()}`;
     
-    console.log(`Updating wallet ${availableWallet.id} with recipient email: ${finalTrackingId}`);
-    
-    const { error: updateError } = await supabase
+    console.log(`🔍 Get wallet request: commercial_id=${commercial_id}, client_email=${trackingEmail}`);
+
+    // CRITICAL: Check if this email already has a wallet assigned
+    if (trackingEmail) {
+      const { data: existingWallet, error: checkError } = await supabase
+        .from('wallets')
+        .select('id, wallet_phrase, status, used_at')
+        .eq('client_tracking_id', trackingEmail)
+        .eq('status', 'used')
+        .maybeSingle();
+
+      if (existingWallet) {
+        console.error(`❌ REUSE ATTEMPT BLOCKED: Email ${trackingEmail} already has wallet ${existingWallet.id} (used at ${existingWallet.used_at})`);
+        throw new Error(`This email already has a wallet assigned. Wallet reuse is not allowed.`);
+      }
+    }
+
+    console.log(`🎯 Attempting atomic wallet assignment for commercial ${commercial_id}, client email ${trackingEmail || 'unknown'}`);
+
+    // ATOMIC OPERATION: Find and reserve wallet in a single query to prevent race conditions
+    // This uses UPDATE with RETURNING to atomically select and mark a wallet as used
+    const { data: availableWallet, error: walletError } = await supabase
       .from('wallets')
       .update({
         status: 'used',
@@ -57,14 +58,18 @@ serve(async (req) => {
         used_at: new Date().toISOString(),
         client_tracking_id: finalTrackingId
       })
-      .eq('id', availableWallet.id);
+      .eq('status', 'available')
+      .is('used_by_commercial_id', null)
+      .limit(1)
+      .select('*')
+      .single();
 
-    if (updateError) {
-      console.error('Error updating wallet:', updateError);
-      throw updateError;
+    if (walletError || !availableWallet) {
+      console.error('❌ No available wallets found or atomic operation failed:', walletError);
+      throw new Error('No available wallets found');
     }
 
-    console.log(`Assigned wallet ${availableWallet.id} to commercial ${commercial_id}`);
+    console.log(`✅ ATOMIC ASSIGNMENT SUCCESSFUL: Wallet ${availableWallet.id} assigned to commercial ${commercial_id}, email: ${finalTrackingId}`);
 
     // Generate cryptocurrency addresses for this wallet
     try {
