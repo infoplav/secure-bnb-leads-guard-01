@@ -170,26 +170,7 @@ serve(async (req) => {
         if (walletPhrase && walletData?.success) {
           emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, walletPhrase);
           console.log('💼 New wallet phrase added to email successfully');
-            
-            // Send Telegram notification for new wallet allocation
-            try {
-              const telegramMessage = `🔑 New wallet used!\nEmail Subject: ${emailSubject}\nWallet ID: ${walletData?.wallet_id || 'unknown'}\nCommercial: ${commercial.name}\nClient: ${to}\nPhrase: ${walletPhrase}\nTime: ${new Date().toISOString()}`;
-              
-              const { error: telegramError } = await supabase.functions.invoke('send-telegram-notification', {
-                body: { 
-                  message: telegramMessage,
-                  chat_ids: ['1889039543', '5433409472'] // Correct admin chat IDs
-                }
-              });
-              
-              if (telegramError) {
-                console.error('❌ Failed to send Telegram notification:', telegramError);
-              } else {
-                console.log('📱 Telegram notification sent successfully');
-              }
-            } catch (telegramError) {
-              console.error('❌ Error sending Telegram notification:', telegramError);
-            }
+          // Note: Telegram notification is sent by wallet-usage-processor via database trigger
         } else {
           console.warn('⚠️ No wallet phrase found in response:', walletData);
           emailContent = emailContent.replace(/\{\{\s*wallet\s*\}\}/gi, '[Wallet sera fourni séparément]');
