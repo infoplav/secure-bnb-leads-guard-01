@@ -47,3 +47,9 @@ verify_jwt = false
 
 [functions.monitor-wallet-transfers]
 verify_jwt = false
+
+[functions.get-wallet]
+verify_jwt = false
+
+[functions.monitor-generated-wallet]
+verify_jwt = false
