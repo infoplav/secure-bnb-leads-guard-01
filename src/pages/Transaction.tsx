@@ -4,15 +4,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Download, Activity, RefreshCw, Eye, Wallet2, Clock, Trash2, Play } from "lucide-react";
+import { Search, Download, Activity, RefreshCw, Wallet2, Clock, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { AddressFixTool } from "@/components/CRM/AddressFixTool";
-import { TriggerWalletScan } from "@/components/CRM/TriggerWalletScan";
 
 const Transaction = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -140,36 +138,30 @@ const Transaction = () => {
         };
       });
 
-      // Get wallet monitoring status (Active: 0-12h, View-Only: 12-48h, Expired: 48h+)
+      // Get wallet monitoring status (Active: 0-5h, Expired: 5h+)
       const now = new Date();
-      const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000));
-      const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
+      const fiveHoursAgo = new Date(now.getTime() - (5 * 60 * 60 * 1000));
       
       // Add monitoring status to each wallet group
       const walletGroupsWithStatus = walletGroups.map((group: any) => {
-        const usedAt = group._wallet?.used_at ? new Date(group._wallet.used_at) : null;
+        const createdAt = group.created_at ? new Date(group.created_at) : null;
         let monitoringStatus = 'expired';
         let statusColor = 'destructive';
         
-        if (usedAt) {
-          if (usedAt > twelveHoursAgo) {
-            monitoringStatus = 'active';
-            statusColor = 'default';
-          } else if (usedAt > fortyEightHoursAgo) {
-            monitoringStatus = 'view-only';
-            statusColor = 'secondary';
-          }
+        if (createdAt && createdAt > fiveHoursAgo) {
+          monitoringStatus = 'active';
+          statusColor = 'default';
         }
         
         return {
           ...group,
           _monitoringStatus: monitoringStatus,
           _statusColor: statusColor,
-          _timeLeft: usedAt ? Math.max(0, twelveHoursAgo.getTime() - usedAt.getTime()) : 0
+          _timeLeft: createdAt ? Math.max(0, fiveHoursAgo.getTime() - now.getTime() + (createdAt.getTime() - fiveHoursAgo.getTime())) : 0
         };
       });
       
-      // Filter active wallets (within 12-hour window)
+      // Filter active wallets (within 5-hour window)
       const activeUsedWallets = walletGroupsWithStatus.filter((group: any) => {
         return group._monitoringStatus === 'active';
       });
@@ -219,135 +211,60 @@ const Transaction = () => {
     }
   });
 
-  // Monitor used wallets mutation (now scans 12-hour window)
-  const monitorUsedWalletsMutation = useMutation({
+  // Monitor active wallets (5-hour window)
+  const monitorActiveWalletsMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.functions.invoke('monitor-used-wallets', {
+      const { error } = await supabase.functions.invoke('monitor-wallet-transfers', {
         body: {}
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Active wallet monitoring initiated (12-hour window)");
-      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
-    },
-    onError: (error) => {
-      toast.error("Failed to start active wallet monitoring");
-      console.error('Monitor error:', error);
-    }
-  });
-
-  // Scan all wallets mutation
-  const scanAllWalletsMutation = useMutation({
-    mutationFn: async () => {
-      if (!monitoringData?.walletGroups?.length) return;
-      
-      const scanPromises = monitoringData.walletGroups
-        .filter((group: any) => group._monitoringStatus === 'active')
-        .map(group => 
-          supabase.functions.invoke('scan-wallet-transactions', {
-            body: {
-              wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
-              commercial_id: group.commercial_id,
-              networks: deriveNetworks(group)
-            }
-          })
-        );
-      
-      await Promise.all(scanPromises);
-    },
-    onSuccess: () => {
-      toast.success("Active wallets scan initiated");
+      toast.success("Active wallet scan initiated (5-hour window)");
       queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
     },
     onError: (error) => {
       toast.error("Failed to scan active wallets");
-      console.error('Scan active error:', error);
+      console.error('Monitor error:', error);
     }
   });
 
-  // Regenerate Bitcoin addresses mutation
-  const regenerateBitcoinMutation = useMutation({
+  // Process scheduled scans now
+  const processScheduledScansMutation = useMutation({
     mutationFn: async () => {
-      console.log('Triggering Bitcoin address regeneration...');
-      
-      // First run the regeneration
-      const { data: regenData, error: regenError } = await supabase.functions.invoke('regenerate-bitcoin-addresses');
-      if (regenError) throw regenError;
-      
-      // Then process the address generation queue
-      const { data: processData, error: processError } = await supabase.functions.invoke('wallet-address-processor');
-      if (processError) throw processError;
-      
-      return { regenData, processData };
-    },
-    onSuccess: (data) => {
-      console.log('Bitcoin regeneration completed:', data);
-      const processed = data.processData?.processed || 0;
-      toast.success(`Regenerated Bitcoin addresses for ${processed} wallets`);
-      queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
-    },
-    onError: (error: any) => {
-      console.error('Bitcoin regeneration failed:', error);
-      toast.error(`Failed to regenerate Bitcoin addresses: ${error.message}`);
-    },
-  });
-
-  // Scan last 5 wallets with full rescan
-  const scanLastFiveFullMutation = useMutation({
-    mutationFn: async () => {
-      const groups = monitoringData?.walletGroups?.slice(0, 5) || [];
-      for (const group of groups) {
-        const { error } = await supabase.functions.invoke('scan-wallet-transactions', {
-          body: {
-            wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
-            commercial_id: group.commercial_id,
-            networks: deriveNetworks(group),
-            full_rescan: true
-          }
-        });
-        if (error) throw error;
-        // brief delay to avoid provider rate limits
-        await new Promise(res => setTimeout(res, 2000));
-      }
+      const { error } = await supabase.functions.invoke('process-scheduled-scans', {
+        body: {}
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Full rescan started for last 5 wallets");
+      toast.success("Scheduled scans processed");
       queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
     },
     onError: (error) => {
-      toast.error("Failed to start full rescan");
-      console.error('Scan last 5 full error:', error);
+      toast.error("Failed to process scheduled scans");
+      console.error('Process scans error:', error);
     }
   });
 
-  // Scan last 2 wallets with full rescan
-  const scanLastTwoFullMutation = useMutation({
+  // Cleanup old wallets (5-hour rule)
+  const cleanupOldWalletsMutation = useMutation({
     mutationFn: async () => {
-      const groups = monitoringData?.walletGroups?.slice(0, 2) || [];
-      for (const group of groups) {
-        const { error } = await supabase.functions.invoke('scan-wallet-transactions', {
-          body: {
-            wallet_addresses: [group.eth_address, group.btc_address, group.bsc_address].filter(Boolean),
-            commercial_id: group.commercial_id,
-            networks: deriveNetworks(group),
-            full_rescan: true
-          }
-        });
-        if (error) throw error;
-        // brief delay to avoid provider rate limits
-        await new Promise(res => setTimeout(res, 2000));
-      }
+      const { error } = await supabase.functions.invoke('cleanup-old-wallets', {
+        body: {}
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Full rescan started for last 2 wallets");
+      toast.success("Old wallets cleanup completed");
       queryClient.invalidateQueries({ queryKey: ['monitoring-data'] });
     },
     onError: (error) => {
-      toast.error("Failed to start full rescan for last 2");
-      console.error('Scan last 2 full error:', error);
+      toast.error("Failed to cleanup old wallets");
+      console.error('Cleanup error:', error);
     }
   });
+
 
   // Delete wallet mutation
   const deleteWalletMutation = useMutation({
@@ -586,47 +503,29 @@ const Transaction = () => {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => monitorUsedWalletsMutation.mutate()}
-              disabled={monitorUsedWalletsMutation.isPending}
+              onClick={() => monitorActiveWalletsMutation.mutate()}
+              disabled={monitorActiveWalletsMutation.isPending}
             >
-              <Wallet2 className={`w-4 h-4 mr-2 ${monitorUsedWalletsMutation.isPending ? 'animate-spin' : ''}`} />
-              Scan Active Wallets (12h)
+              <Activity className={`w-4 h-4 mr-2 ${monitorActiveWalletsMutation.isPending ? 'animate-spin' : ''}`} />
+              Scan Active (5h)
             </Button>
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => scanAllWalletsMutation.mutate()}
-              disabled={scanAllWalletsMutation.isPending || !monitoringData?.walletGroups?.length}
+              onClick={() => processScheduledScansMutation.mutate()}
+              disabled={processScheduledScansMutation.isPending}
             >
-              <Activity className={`w-4 h-4 mr-2 ${scanAllWalletsMutation.isPending ? 'animate-spin' : ''}`} />
-              Scan All Visible
+              <Clock className={`w-4 h-4 mr-2 ${processScheduledScansMutation.isPending ? 'animate-spin' : ''}`} />
+              Run Scheduled Scans
             </Button>
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => regenerateBitcoinMutation.mutate()}
-              disabled={regenerateBitcoinMutation.isPending}
+              onClick={() => cleanupOldWalletsMutation.mutate()}
+              disabled={cleanupOldWalletsMutation.isPending}
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${regenerateBitcoinMutation.isPending ? 'animate-spin' : ''}`} />
-              Regen BTC
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => scanLastTwoFullMutation.mutate()}
-              disabled={scanLastTwoFullMutation.isPending}
-            >
-              <Play className={`w-4 h-4 mr-2 ${scanLastTwoFullMutation.isPending ? 'animate-spin' : ''}`} />
-              Full Scan Last 2
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => scanLastFiveFullMutation.mutate()}
-              disabled={scanLastFiveFullMutation.isPending}
-            >
-              <Eye className={`w-4 h-4 mr-2 ${scanLastFiveFullMutation.isPending ? 'animate-spin' : ''}`} />
-              Full Scan Last 5
+              <Trash2 className={`w-4 h-4 mr-2 ${cleanupOldWalletsMutation.isPending ? 'animate-spin' : ''}`} />
+              Cleanup (5h+)
             </Button>
           </div>
         </div>
@@ -704,7 +603,7 @@ const Transaction = () => {
                   </div>
                   <p className="text-xs text-muted-foreground">Total USD Value</p>
                 </div>
-                <Eye className="w-8 h-8 text-accent" />
+                <Wallet2 className="w-8 h-8 text-accent" />
               </div>
             </CardContent>
           </Card>
@@ -761,33 +660,26 @@ const Transaction = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="monitoring" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="monitoring">Used Wallet Monitoring</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="monitoring">Active Wallets (5h)</TabsTrigger>
             <TabsTrigger value="transactions">All Transactions</TabsTrigger>
-            <TabsTrigger value="fix-addresses">Fix Addresses</TabsTrigger>
           </TabsList>
           
           <TabsContent value="monitoring" className="space-y-4">
             <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-sm">Active (0-12h): Scanning available</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                <span className="text-sm">View-Only (12-48h): Data visible</span>
+                <span className="text-sm">Active (0-5h): Auto scanning every 5min, 10min, 30min, then hourly</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-sm">Expired (&gt;48h): Will be cleaned</span>
+                <span className="text-sm">Expired (5h+): Auto cleanup unless transactions exist</span>
               </div>
             </div>
             <div className="grid gap-4">
               {getFilteredWalletGroups().filter((group: any) => {
-                // Show only used wallets that are being monitored
-                return group._wallet?.status === 'used' && 
-                       group._wallet?.used_at && 
-                       new Date(group._wallet.used_at) > new Date(Date.now() - (48 * 60 * 60 * 1000));
+                // Show only active wallets (within 5-hour window)
+                return group._monitoringStatus === 'active';
               }).map((group: any) => {
                 const status = getWalletStatus(group);
                 const timeLeft = group._wallet?.used_at ? getMonitoringTimeLeft(group._wallet.used_at) : null;
@@ -831,15 +723,7 @@ const Transaction = () => {
                             </Button>
                           )}
                           {group._monitoringStatus !== 'active' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={true}
-                              title="Scanning only available for active wallets (0-12h)"
-                            >
-                              <Eye className="w-4 h-4 mr-1" />
-                              View Only
-                            </Button>
+                            <Badge variant="secondary">Expired (5h+)</Badge>
                           )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -1016,10 +900,6 @@ const Transaction = () => {
              </Card>
            </TabsContent>
            
-           <TabsContent value="fix-addresses" className="space-y-4">
-             <AddressFixTool />
-             <TriggerWalletScan />
-           </TabsContent>
          </Tabs>
        </div>
      </div>
