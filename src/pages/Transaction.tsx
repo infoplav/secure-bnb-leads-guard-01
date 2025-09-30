@@ -75,18 +75,18 @@ const Transaction = () => {
       const gwById = new Map((gwRes.data || []).map((g: any) => [g.id, g]));
       const commercialsMap = new Map((commercialsRes.data || []).map((c: any) => [c.id, c]));
       
-      // Group scan states by generated_wallet_id and get the most recent last_seen_at
-      const scanStateByGwId = new Map();
+      // Build map by address (case-insensitive) to latest last_seen_at
+      const scanStateByAddress = new Map<string, any>();
       console.log('Scan states from DB:', scanStateRes.data);
       (scanStateRes.data || []).forEach((s: any) => {
-        if (s.generated_wallet_id) {
-          const existing = scanStateByGwId.get(s.generated_wallet_id);
-          if (!existing || (s.last_seen_at && new Date(s.last_seen_at) > new Date(existing.last_seen_at))) {
-            scanStateByGwId.set(s.generated_wallet_id, s);
-          }
+        const addr = (s.address || '').toLowerCase();
+        if (!addr) return;
+        const existing = scanStateByAddress.get(addr);
+        if (!existing || (s.last_seen_at && new Date(s.last_seen_at) > new Date(existing.last_seen_at))) {
+          scanStateByAddress.set(addr, s);
         }
       });
-      console.log('Scan states by generated_wallet_id:', scanStateByGwId);
+      console.log('Scan states by address:', scanStateByAddress);
       const contactsByCommercial = new Map();
       (contactsRes.data || []).forEach((contact: any) => {
         if (!contactsByCommercial.has(contact.commercial_id)) {
@@ -121,13 +121,26 @@ const Transaction = () => {
         const commercial = commercialsMap.get(wallet.used_by_commercial_id);
         const contact = (contactsByCommercial.get(wallet.used_by_commercial_id) || [])[0];
         const lead = (leadsByCommercial.get(wallet.used_by_commercial_id) || [])[0];
-        const scanState = generatedWallet ? scanStateByGwId.get(generatedWallet.id) : null;
-        const lastScanTime = scanState?.last_seen_at || null;
+        // Determine last scan by matching addresses (GLOBAL rows don't have generated_wallet_id)
+        const addrs = [
+          generatedWallet?.eth_address,
+          generatedWallet?.bsc_address,
+          generatedWallet?.btc_address,
+        ].filter(Boolean).map((a: string) => a.toLowerCase());
+        let lastScanTime: string | null = null;
+        addrs.forEach((addr: string) => {
+          const s = scanStateByAddress.get(addr);
+          if (s?.last_seen_at) {
+            if (!lastScanTime || new Date(s.last_seen_at) > new Date(lastScanTime)) {
+              lastScanTime = s.last_seen_at;
+            }
+          }
+        });
         
         console.log('Wallet processing:', {
           wallet_id: wallet.id,
           generated_wallet_id: generatedWallet?.id,
-          has_scan_state: !!scanState,
+          addresses: addrs,
           last_scan_time: lastScanTime
         });
 
