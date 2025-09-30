@@ -175,6 +175,30 @@ const Admin = () => {
     },
   });
 
+  // Fix wallet addresses mutation
+  const fixWalletAddressesMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('fix-all-wallet-addresses', {
+        body: {},
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Adresses régénérées avec succès", 
+        description: `${data.updated} wallets mis à jour sur ${data.total}` 
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Erreur", 
+        description: error.message || "Impossible de régénérer les adresses",
+        variant: "destructive" 
+      });
+    },
+  });
+
   // Calculate statistics
   const totalCommercials = commercials.length;
   const totalLeads = leads.length;
@@ -228,6 +252,13 @@ const Admin = () => {
           <p className="text-muted-foreground">Gestion des commerciaux et suivi des performances</p>
         </div>
         <div className="flex gap-3">
+          <Button 
+            variant="outline"
+            onClick={() => fixWalletAddressesMutation.mutate()}
+            disabled={fixWalletAddressesMutation.isPending}
+          >
+            {fixWalletAddressesMutation.isPending ? '⏳ Régénération...' : '🔄 Fix Wallet Addresses'}
+          </Button>
           <Link to="/transcripts">
             <Button 
               variant="outline"
