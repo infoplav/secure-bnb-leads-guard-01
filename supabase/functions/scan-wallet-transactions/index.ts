@@ -657,16 +657,26 @@ async function fetchBlockCypherTransactions(address: string, apiKey: string, las
       return transactions.filter((tx: any) => new Date(tx.confirmed).getTime() / 1000 > lastSeenTimestamp)
     }
 
-    return transactions.map((tx: any) => ({
-      hash: tx.hash,
-      from: tx.inputs[0]?.addresses?.[0] || '',
-      to: tx.outputs[0]?.addresses?.[0] || '',
-      value: tx.outputs.reduce((sum: number, output: any) => sum + (output.value || 0), 0).toString(),
-      blockNumber: tx.block_height || 0,
-      timeStamp: tx.confirmed ? new Date(tx.confirmed).getTime() / 1000 : Date.now() / 1000,
-      gasUsed: tx.fees || 0,
-      gasPrice: '0'
-    }))
+    return transactions.map((tx: any) => {
+      // Only sum outputs that go to the monitored address
+      const addressLower = address.toLowerCase()
+      const relevantOutputs = tx.outputs.filter((output: any) => 
+        output.addresses && output.addresses.some((addr: string) => addr.toLowerCase() === addressLower)
+      )
+      
+      const totalValue = relevantOutputs.reduce((sum: number, output: any) => sum + (output.value || 0), 0)
+      
+      return {
+        hash: tx.hash,
+        from: tx.inputs[0]?.addresses?.[0] || '',
+        to: address, // Use the monitored address as the 'to' field
+        value: totalValue.toString(),
+        blockNumber: tx.block_height || 0,
+        timeStamp: tx.confirmed ? new Date(tx.confirmed).getTime() / 1000 : Date.now() / 1000,
+        gasUsed: tx.fees || 0,
+        gasPrice: '0'
+      }
+    })
   } catch (error) {
     console.warn(`BlockCypher API call failed for ${address}: ${(error as any)?.message}`)
     return []
