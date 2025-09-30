@@ -159,6 +159,11 @@ const Transaction = () => {
           _statusColor: statusColor,
           _timeLeft: createdAt ? Math.max(0, fiveHoursAgo.getTime() - now.getTime() + (createdAt.getTime() - fiveHoursAgo.getTime())) : 0
         };
+      }).sort((a: any, b: any) => {
+        // Sort by most recent created_at first
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA;
       });
       
       // Filter active wallets (within 5-hour window)
