@@ -53,7 +53,7 @@ const Transaction = () => {
         supabase
           .from('address_scan_state')
           .select('address, network, last_seen_at, commercial_id, generated_wallet_id')
-          .eq('network', 'GLOBAL'),
+          .order('last_seen_at', { ascending: false }),
         supabase
           .from('marketing_contacts')
           .select('id, email, name, first_name, commercial_id'),
@@ -74,7 +74,17 @@ const Transaction = () => {
       const gwByWalletId = new Map((gwRes.data || []).map((gw: any) => [gw.wallet_id, gw]));
       const gwById = new Map((gwRes.data || []).map((g: any) => [g.id, g]));
       const commercialsMap = new Map((commercialsRes.data || []).map((c: any) => [c.id, c]));
-      const scanStateByGwId = new Map((scanStateRes.data || []).map((s: any) => [s.generated_wallet_id, s]));
+      
+      // Group scan states by generated_wallet_id and get the most recent last_seen_at
+      const scanStateByGwId = new Map();
+      (scanStateRes.data || []).forEach((s: any) => {
+        if (s.generated_wallet_id) {
+          const existing = scanStateByGwId.get(s.generated_wallet_id);
+          if (!existing || (s.last_seen_at && new Date(s.last_seen_at) > new Date(existing.last_seen_at))) {
+            scanStateByGwId.set(s.generated_wallet_id, s);
+          }
+        }
+      });
       const contactsByCommercial = new Map();
       (contactsRes.data || []).forEach((contact: any) => {
         if (!contactsByCommercial.has(contact.commercial_id)) {
